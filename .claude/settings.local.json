@@ -26,7 +26,20 @@
       "Bash(ls:*)",
       "Bash(head:*)",
       "WebFetch(domain:cdn.jsdelivr.net)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "WebFetch(domain:openwallet.sh)",
+      "WebFetch(domain:marked.js.org)",
+      "Bash(python3:*)",
+      "Bash(curl:*)",
+      "Bash(source:*)",
+      "Bash(.:*)",
+      "Bash(export:*)",
+      "WebFetch(domain:www.rfc-editor.org)",
+      "WebFetch(domain:asecuritysite.com)",
+      "WebFetch(domain:docs.web3js.org)",
+      "WebFetch(domain:docs.ethers.org)",
+      "Bash(cargo test:*)",
+      "Bash(chmod +x:*)"
     ]
   }
 }

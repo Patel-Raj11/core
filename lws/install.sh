@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="https://github.com/anthropics/wallet-spec.git"
+REPO="https://github.com/dawnlabsai/lws.git"
 INSTALL_DIR="${LWS_INSTALL_DIR:-$HOME/.lws/bin}"
 MIN_RUST="1.70.0"
 

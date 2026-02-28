@@ -5,14 +5,14 @@ Rust implementation of the [Local Wallet Standard](https://localwalletstandard.o
 ## Quick Install
 
 ```bash
-curl -sSf https://raw.githubusercontent.com/anthropics/wallet-spec/main/lws/install.sh | bash
+curl -sSf https://raw.githubusercontent.com/dawnlabsai/lws/main/lws/install.sh | bash
 ```
 
 Or clone and install locally:
 
 ```bash
-git clone https://github.com/anthropics/wallet-spec.git
-cd wallet-spec
+git clone https://github.com/dawnlabsai/lws.git
+cd lws
 ./lws/install.sh
 ```
 
