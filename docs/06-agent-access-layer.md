@@ -131,23 +131,9 @@ View the policies attached to the caller's API key. Returns policy metadata (nam
 
 ## MCP Server Configuration
 
-Agents configure the LWS MCP server in their MCP settings. The MCP server can be scoped to an API key via `--key` or the `LWS_API_KEY` environment variable. If no key is provided, the MCP server requires passphrase unlock and operates in owner (sudo) mode.
+Agents configure the LWS MCP server in their MCP settings. The MCP server is scoped to an API key via the `LWS_API_KEY` environment variable. If no key is provided, the MCP server requires passphrase unlock and operates in owner (sudo) mode.
 
-```json
-{
-  "mcpServers": {
-    "lws": {
-      "command": "lws",
-      "args": ["serve", "--mcp", "--key", "lws_key_a1b2c3d4e5f6..."],
-      "env": {
-        "LWS_VAULT_PATH": "~/.lws"
-      }
-    }
-  }
-}
-```
-
-Or using the environment variable:
+> **Security:** API keys MUST be passed via the `LWS_API_KEY` environment variable, NOT as command-line arguments. Command-line arguments are visible to all local users via `ps aux` and similar process-listing tools, which would expose the raw API key token.
 
 ```json
 {
@@ -156,7 +142,8 @@ Or using the environment variable:
       "command": "lws",
       "args": ["serve", "--mcp"],
       "env": {
-        "LWS_API_KEY": "lws_key_a1b2c3d4e5f6..."
+        "LWS_API_KEY": "lws_key_a1b2c3d4e5f6...",
+        "LWS_VAULT_PATH": "~/.lws"
       }
     }
   }
@@ -260,7 +247,7 @@ When used as a library, the signing enclave runs as a worker thread (not a subpr
 
 ## Agent Interaction Example
 
-Here's how an AI agent interacts with LWS through MCP using an API key. The MCP server was started with `--key lws_key_a1b2c3d4e5f6...`, scoping the agent to specific wallets and policies.
+Here's how an AI agent interacts with LWS through MCP using an API key. The MCP server was started with `LWS_API_KEY` set, scoping the agent to specific wallets and policies.
 
 ```
 Agent: "I need to send 0.01 ETH to 0x4B08... on Base"

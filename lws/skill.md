@@ -45,34 +45,41 @@ cp target/release/lws ~/.lws/bin/lws
 
 ## Commands
 
-### `lws generate`
+### `lws wallet create`
 
-Generate a new BIP-39 mnemonic phrase.
-
-```
-lws generate [--words 12|24]
-```
-
-- `--words` — Number of mnemonic words, 12 or 24 (default: `12`)
-
-### `lws derive`
-
-Derive an address from a mnemonic. The mnemonic is read from the `LWS_MNEMONIC` environment variable or stdin (never passed as a CLI flag).
+Create a new wallet — generates a mnemonic and saves a wallet descriptor to the vault.
 
 ```
-LWS_MNEMONIC="<PHRASE>" lws derive --chain <CHAIN> [--index 0]
-echo "<PHRASE>" | lws derive --chain <CHAIN> [--index 0]
+lws wallet create --name <NAME> --chain <CHAIN> [--words 12|24] [--show-mnemonic]
 ```
 
-- `--chain` — Chain type: `evm`, `solana`, `bitcoin`, `cosmos`, `tron` (required)
-- `--index` — Account index (default: `0`)
+- `--name` — Wallet name (required)
+- `--chain` — Chain type (required)
+- `--words` — Mnemonic word count (default: `12`)
+- `--show-mnemonic` — Display the generated mnemonic (for backup only)
 
-### `lws sign-message`
+### `lws wallet list`
+
+List all saved wallets in the vault.
+
+```
+lws wallet list
+```
+
+### `lws wallet info`
+
+Show the vault path and list supported chains.
+
+```
+lws wallet info
+```
+
+### `lws sign message`
 
 Sign a message using a vault wallet with chain-specific formatting (EIP-191 for EVM, etc.).
 
 ```
-lws sign-message --wallet <NAME> --chain <CHAIN> --message <MSG> [--encoding utf8] [--typed-data <JSON>] [--index 0] [--json]
+lws sign message --wallet <NAME> --chain <CHAIN> --message <MSG> [--encoding utf8] [--typed-data <JSON>] [--index 0] [--json]
 ```
 
 - `--wallet` — Wallet name or ID from the vault (required, also via `LWS_WALLET` env)
@@ -83,12 +90,12 @@ lws sign-message --wallet <NAME> --chain <CHAIN> --message <MSG> [--encoding utf
 - `--index` — Account index (default: `0`)
 - `--json` — Output structured JSON (`signature` + `recovery_id`) instead of raw hex
 
-### `lws sign-transaction`
+### `lws sign tx`
 
 Sign a raw transaction using a vault wallet.
 
 ```
-lws sign-transaction --wallet <NAME> --chain <CHAIN> --tx <HEX> [--index 0] [--json]
+lws sign tx --wallet <NAME> --chain <CHAIN> --tx <HEX> [--index 0] [--json]
 ```
 
 - `--wallet` — Wallet name or ID from the vault (required, also via `LWS_WALLET` env)
@@ -97,34 +104,27 @@ lws sign-transaction --wallet <NAME> --chain <CHAIN> --tx <HEX> [--index 0] [--j
 - `--index` — Account index (default: `0`)
 - `--json` — Output structured JSON (`signature` + `recovery_id`) instead of raw hex
 
-### `lws info`
+### `lws mnemonic generate`
 
-Show the vault path and list supported chains.
-
-```
-lws info
-```
-
-### `lws create-wallet`
-
-Create a new wallet — generates a mnemonic and saves a wallet descriptor to the vault.
+Generate a new BIP-39 mnemonic phrase.
 
 ```
-lws create-wallet --name <NAME> --chain <CHAIN> [--words 12|24] [--show-mnemonic]
+lws mnemonic generate [--words 12|24]
 ```
 
-- `--name` — Wallet name (required)
-- `--chain` — Chain type (required)
-- `--words` — Mnemonic word count (default: `12`)
-- `--show-mnemonic` — Display the generated mnemonic (for backup only)
+- `--words` — Number of mnemonic words, 12 or 24 (default: `12`)
 
-### `lws list-wallets`
+### `lws mnemonic derive`
 
-List all saved wallets in the vault.
+Derive an address from a mnemonic. The mnemonic is read from the `LWS_MNEMONIC` environment variable or stdin (never passed as a CLI flag).
 
 ```
-lws list-wallets
+LWS_MNEMONIC="<PHRASE>" lws mnemonic derive --chain <CHAIN> [--index 0]
+echo "<PHRASE>" | lws mnemonic derive --chain <CHAIN> [--index 0]
 ```
+
+- `--chain` — Chain type: `evm`, `solana`, `bitcoin`, `cosmos`, `tron` (required)
+- `--index` — Account index (default: `0`)
 
 ### `lws update`
 

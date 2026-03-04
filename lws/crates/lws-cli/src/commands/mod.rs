@@ -1,7 +1,8 @@
+pub mod config;
 pub mod derive;
 pub mod generate;
 pub mod info;
-pub mod sign;
+pub mod send_transaction;
 pub mod sign_message;
 pub mod sign_transaction;
 pub mod uninstall;
@@ -35,6 +36,34 @@ pub fn read_mnemonic() -> Result<String, CliError> {
     if trimmed.is_empty() {
         return Err(CliError::InvalidArgs(
             "no mnemonic provided (set LWS_MNEMONIC or pipe via stdin)".into(),
+        ));
+    }
+
+    Ok(trimmed)
+}
+
+/// Read a hex-encoded private key from LWS_PRIVATE_KEY env var or stdin.
+pub fn read_private_key() -> Result<String, CliError> {
+    if let Some(value) = clear_env_var("LWS_PRIVATE_KEY") {
+        let trimmed = value.trim().to_string();
+        if !trimmed.is_empty() {
+            return Ok(trimmed);
+        }
+    }
+
+    let stdin = io::stdin();
+    if stdin.is_terminal() {
+        eprint!("Enter private key (hex): ");
+        io::stderr().flush().ok();
+    }
+
+    let mut line = String::new();
+    stdin.lock().read_line(&mut line)?;
+    let trimmed = line.trim().to_string();
+
+    if trimmed.is_empty() {
+        return Err(CliError::InvalidArgs(
+            "no private key provided (set LWS_PRIVATE_KEY or pipe via stdin)".into(),
         ));
     }
 

@@ -50,38 +50,60 @@ pub fn log_audit(entry: &AuditEntry) {
     }
 }
 
-/// Convenience: log a wallet creation event.
-pub fn log_wallet_created(wallet_id: &str, chain_id: &str, address: &str) {
-    log_audit(&AuditEntry {
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        wallet_id: wallet_id.to_string(),
-        operation: "create_wallet".to_string(),
-        chain_id: Some(chain_id.to_string()),
-        address: Some(address.to_string()),
-        details: None,
-    });
-}
-
-/// Convenience: log a signing event.
-pub fn log_sign(wallet_id: &str, chain_id: &str, operation: &str) {
+/// Generic wallet event logger. All wallet audit helpers delegate here.
+pub fn log_wallet_event(
+    wallet_id: &str,
+    operation: &str,
+    chain_id: Option<&str>,
+    address: Option<&str>,
+    details: Option<String>,
+) {
     log_audit(&AuditEntry {
         timestamp: chrono::Utc::now().to_rfc3339(),
         wallet_id: wallet_id.to_string(),
         operation: operation.to_string(),
-        chain_id: Some(chain_id.to_string()),
-        address: None,
-        details: None,
+        chain_id: chain_id.map(String::from),
+        address: address.map(String::from),
+        details,
     });
+}
+
+/// Convenience: log a wallet creation event.
+pub fn log_wallet_created(wallet_id: &str, chain_id: &str, address: &str) {
+    log_wallet_event(wallet_id, "create_wallet", Some(chain_id), Some(address), None);
+}
+
+/// Convenience: log a signing event.
+pub fn log_sign(wallet_id: &str, chain_id: &str, operation: &str) {
+    log_wallet_event(wallet_id, operation, Some(chain_id), None, None);
+}
+
+/// Convenience: log a wallet import event.
+pub fn log_wallet_imported(wallet_id: &str, chain_id: &str, address: &str) {
+    log_wallet_event(wallet_id, "import_wallet", Some(chain_id), Some(address), None);
+}
+
+/// Convenience: log a wallet export event.
+pub fn log_wallet_exported(wallet_id: &str) {
+    log_wallet_event(wallet_id, "export_wallet", None, None, None);
+}
+
+/// Convenience: log a wallet deletion event.
+pub fn log_wallet_deleted(wallet_id: &str, name: &str) {
+    log_wallet_event(wallet_id, "delete_wallet", None, None, Some(format!("name={name}")));
+}
+
+/// Convenience: log a wallet rename event.
+pub fn log_wallet_renamed(wallet_id: &str, old_name: &str, new_name: &str) {
+    log_wallet_event(wallet_id, "rename_wallet", None, None, Some(format!("{old_name} -> {new_name}")));
+}
+
+/// Convenience: log a broadcast event.
+pub fn log_broadcast(wallet_id: &str, chain_id: &str, tx_hash: &str) {
+    log_wallet_event(wallet_id, "broadcast_transaction", Some(chain_id), None, Some(format!("tx_hash={tx_hash}")));
 }
 
 /// Convenience: log a derive event.
 pub fn log_derive(chain_id: &str, address: &str) {
-    log_audit(&AuditEntry {
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        wallet_id: "ephemeral".to_string(),
-        operation: "derive_address".to_string(),
-        chain_id: Some(chain_id.to_string()),
-        address: Some(address.to_string()),
-        details: None,
-    });
+    log_wallet_event("ephemeral", "derive_address", Some(chain_id), Some(address), None);
 }

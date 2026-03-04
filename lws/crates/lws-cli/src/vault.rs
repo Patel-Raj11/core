@@ -153,6 +153,25 @@ pub fn prompt_passphrase(confirm: bool) -> Result<String, CliError> {
     Ok(pass)
 }
 
+/// Delete a wallet file from the vault by ID.
+pub fn delete_wallet(id: &str) -> Result<(), CliError> {
+    let dir = wallets_dir()?;
+    let path = dir.join(format!("{id}.json"));
+    if !path.exists() {
+        return Err(CliError::InvalidArgs(format!(
+            "wallet file not found: {id}"
+        )));
+    }
+    fs::remove_file(&path)?;
+    Ok(())
+}
+
+/// Check whether a wallet with the given name already exists in the vault.
+pub fn wallet_name_exists(name: &str) -> Result<bool, CliError> {
+    let wallets = list_encrypted_wallets()?;
+    Ok(wallets.iter().any(|w| w.name == name))
+}
+
 /// Read passphrase from LWS_PASSPHRASE env var, falling back to interactive prompt.
 pub fn get_passphrase(confirm: bool) -> Result<String, CliError> {
     if let Ok(pass) = std::env::var("LWS_PASSPHRASE") {

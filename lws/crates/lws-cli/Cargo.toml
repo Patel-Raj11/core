@@ -14,6 +14,7 @@ lws-signer = { path = "../lws-signer" }
 clap = { version = "4", features = ["derive", "env"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
+base64 = "0.22"
 hex = "0.4"
 sha3 = "0.10"
 thiserror = "2"
