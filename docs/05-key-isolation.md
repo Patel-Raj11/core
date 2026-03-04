@@ -175,7 +175,7 @@ The vault `unlock` operation (see [Enclave Protocol](#enclave-protocol)) also es
 | Coinbase CDP | TEE | No (cloud) |
 | Lit Protocol | Distributed key generation across nodes | No (network) |
 | Crossmint | Dual-key smart contract + TEE | No (cloud) |
-| Phala MCP Wallet | TEE (Intel SGX) on decentralized cloud | No (cloud) |
+| Phala Wallet | TEE (Intel SGX) on decentralized cloud | No (cloud) |
 | **LWS** | **OS process isolation + optional TEE** | **Yes** |
 
 LWS is the only standard designed for local-first operation. The subprocess model works on any machine — no cloud accounts, no network connectivity, no hardware enclaves required. When stronger guarantees are needed, the enclave can be upgraded without changing the interface.
@@ -185,7 +185,6 @@ LWS is the only standard designed for local-first operation. The subprocess mode
 - [Privy: Embedded Wallet Architecture](https://privy.io/blog/embedded-wallet-architecture)
 - [Privy: SSS vs MPC-TSS vs TEEs](https://privy.io/blog/embedded-wallet-architecture-breakdown)
 - [Turnkey: Key Management in Nitro Enclaves](https://whitepaper.turnkey.com/principles)
-- [Phala: TEE-Hosted MCP Wallet Server](https://phala.com/posts/developer-guide-securely-deploy-a-crypto-wallet-mcp-server-on-phala-cloud)
-- [Google Cloud: Securing Blockchain-Interacting Agents](https://cloud.google.com/blog/products/identity-security/using-mcp-with-web3-how-to-secure-blockchain-interacting-agents)
+- [Google Cloud: Securing Blockchain-Interacting Agents](https://cloud.google.com/blog/products/identity-security/securing-blockchain-interacting-agents)
 - [Linux prctl(2) PR_SET_DUMPABLE](https://man7.org/linux/man-pages/man2/prctl.2.html)
 - [mlock(2) Memory Locking](https://man7.org/linux/man-pages/man2/mlock.2.html)
