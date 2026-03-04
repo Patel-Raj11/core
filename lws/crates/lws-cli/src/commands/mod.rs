@@ -74,8 +74,7 @@ pub fn read_private_key() -> Result<String, CliError> {
 pub fn resolve_mnemonic(wallet_name: &str) -> Result<String, CliError> {
     let wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    let passphrase = vault::get_passphrase(false)?;
-    let secret = lws_signer::decrypt(&envelope, &passphrase)?;
+    let secret = lws_signer::decrypt(&envelope, "")?;
     String::from_utf8(secret.expose().to_vec())
         .map_err(|_| CliError::InvalidArgs("wallet contains invalid UTF-8 mnemonic".into()))
 }

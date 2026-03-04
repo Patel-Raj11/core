@@ -1,0 +1,9 @@
+{
+  "name": "@local-wallet-standard/node-darwin-arm64",
+  "version": "0.2.0",
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "main": "lws-node.darwin-arm64.node",
+  "files": ["lws-node.darwin-arm64.node"],
+  "license": "MIT"
+}

@@ -4,8 +4,6 @@ import tempfile
 import pytest
 import lws
 
-PASSPHRASE = "supersecretpass!"
-
 
 @pytest.fixture
 def vault_dir():
@@ -31,7 +29,7 @@ def test_derive_address_evm():
 
 
 def test_create_and_list_wallets(vault_dir):
-    wallet = lws.create_wallet("test-wallet", "evm", PASSPHRASE, vault_path_opt=vault_dir)
+    wallet = lws.create_wallet("test-wallet", "evm", vault_path_opt=vault_dir)
     assert wallet["name"] == "test-wallet"
     assert wallet["chain"] == "evm"
     assert wallet["address"].startswith("0x")
@@ -42,7 +40,7 @@ def test_create_and_list_wallets(vault_dir):
 
 
 def test_get_wallet(vault_dir):
-    wallet = lws.create_wallet("lookup", "evm", PASSPHRASE, vault_path_opt=vault_dir)
+    wallet = lws.create_wallet("lookup", "evm", vault_path_opt=vault_dir)
 
     found = lws.get_wallet("lookup", vault_path_opt=vault_dir)
     assert found["id"] == wallet["id"]
@@ -52,7 +50,7 @@ def test_get_wallet(vault_dir):
 
 
 def test_rename_wallet(vault_dir):
-    lws.create_wallet("old-name", "evm", PASSPHRASE, vault_path_opt=vault_dir)
+    lws.create_wallet("old-name", "evm", vault_path_opt=vault_dir)
     lws.rename_wallet("old-name", "new-name", vault_path_opt=vault_dir)
 
     found = lws.get_wallet("new-name", vault_path_opt=vault_dir)
@@ -60,13 +58,13 @@ def test_rename_wallet(vault_dir):
 
 
 def test_export_wallet(vault_dir):
-    lws.create_wallet("exportable", "evm", PASSPHRASE, vault_path_opt=vault_dir)
-    secret = lws.export_wallet("exportable", PASSPHRASE, vault_path_opt=vault_dir)
+    lws.create_wallet("exportable", "evm", vault_path_opt=vault_dir)
+    secret = lws.export_wallet("exportable", vault_path_opt=vault_dir)
     assert len(secret.split()) == 12
 
 
 def test_delete_wallet(vault_dir):
-    wallet = lws.create_wallet("deletable", "evm", PASSPHRASE, vault_path_opt=vault_dir)
+    wallet = lws.create_wallet("deletable", "evm", vault_path_opt=vault_dir)
     lws.delete_wallet("deletable", vault_path_opt=vault_dir)
 
     wallets = lws.list_wallets(vault_path_opt=vault_dir)
@@ -78,27 +76,27 @@ def test_import_wallet_mnemonic(vault_dir):
     expected_addr = lws.derive_address(phrase, "evm")
 
     wallet = lws.import_wallet_mnemonic(
-        "imported", "evm", phrase, PASSPHRASE, vault_path_opt=vault_dir
+        "imported", "evm", phrase, vault_path_opt=vault_dir
     )
     assert wallet["name"] == "imported"
     assert wallet["address"] == expected_addr
 
 
 def test_sign_transaction(vault_dir):
-    lws.create_wallet("signer", "evm", PASSPHRASE, vault_path_opt=vault_dir)
+    lws.create_wallet("signer", "evm", vault_path_opt=vault_dir)
 
     tx_hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
     result = lws.sign_transaction(
-        "signer", "evm", tx_hex, PASSPHRASE, vault_path_opt=vault_dir
+        "signer", "evm", tx_hex, vault_path_opt=vault_dir
     )
     assert len(result["signature"]) > 0
     assert result["recovery_id"] is not None
 
 
 def test_sign_message(vault_dir):
-    lws.create_wallet("msg-signer", "evm", PASSPHRASE, vault_path_opt=vault_dir)
+    lws.create_wallet("msg-signer", "evm", vault_path_opt=vault_dir)
 
     result = lws.sign_message(
-        "msg-signer", "evm", "hello world", PASSPHRASE, vault_path_opt=vault_dir
+        "msg-signer", "evm", "hello world", vault_path_opt=vault_dir
     )
     assert len(result["signature"]) > 0

@@ -44,15 +44,6 @@ fn parse_chain(s: &str) -> Result<ChainType, LwsLibError> {
         .map_err(|e| LwsLibError::InvalidInput(e))
 }
 
-fn validate_passphrase(passphrase: &str) -> Result<(), LwsLibError> {
-    if passphrase.len() < 12 {
-        return Err(LwsLibError::InvalidInput(
-            "passphrase must be at least 12 characters".into(),
-        ));
-    }
-    Ok(())
-}
-
 /// Generate a new BIP-39 mnemonic phrase.
 pub fn generate_mnemonic(words: u32) -> Result<String, LwsLibError> {
     let strength = match words {
@@ -89,10 +80,10 @@ pub fn create_wallet(
     name: &str,
     chain: &str,
     words: Option<u32>,
-    passphrase: &str,
+    passphrase: Option<&str>,
     vault_path: Option<&Path>,
 ) -> Result<WalletInfo, LwsLibError> {
-    validate_passphrase(passphrase)?;
+    let passphrase = passphrase.unwrap_or("");
     let chain = parse_chain(chain)?;
     let words = words.unwrap_or(12);
     let strength = match words {
@@ -145,11 +136,11 @@ pub fn import_wallet_mnemonic(
     name: &str,
     chain: &str,
     mnemonic_phrase: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     index: Option<u32>,
     vault_path: Option<&Path>,
 ) -> Result<WalletInfo, LwsLibError> {
-    validate_passphrase(passphrase)?;
+    let passphrase = passphrase.unwrap_or("");
     let chain = parse_chain(chain)?;
     let index = index.unwrap_or(0);
 
@@ -196,10 +187,10 @@ pub fn import_wallet_private_key(
     name: &str,
     chain: &str,
     private_key_hex: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     vault_path: Option<&Path>,
 ) -> Result<WalletInfo, LwsLibError> {
-    validate_passphrase(passphrase)?;
+    let passphrase = passphrase.unwrap_or("");
     let chain = parse_chain(chain)?;
 
     if vault::wallet_name_exists(name, vault_path)? {
@@ -266,9 +257,10 @@ pub fn delete_wallet(
 /// Export a wallet's secret (mnemonic or private key).
 pub fn export_wallet(
     name_or_id: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     vault_path: Option<&Path>,
 ) -> Result<String, LwsLibError> {
+    let passphrase = passphrase.unwrap_or("");
     let wallet = vault::load_wallet_by_name_or_id(name_or_id, vault_path)?;
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
     let secret = decrypt(&envelope, passphrase)?;
@@ -306,10 +298,11 @@ pub fn sign_transaction(
     wallet: &str,
     chain: &str,
     tx_hex: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     index: Option<u32>,
     vault_path: Option<&Path>,
 ) -> Result<SignResult, LwsLibError> {
+    let passphrase = passphrase.unwrap_or("");
     let chain = parse_chain(chain)?;
     let mnemonic_str = decrypt_wallet_secret(wallet, passphrase, vault_path)?;
     let mnemonic = Mnemonic::from_phrase(&mnemonic_str)?;
@@ -339,11 +332,12 @@ pub fn sign_message(
     wallet: &str,
     chain: &str,
     message: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     encoding: Option<&str>,
     index: Option<u32>,
     vault_path: Option<&Path>,
 ) -> Result<SignResult, LwsLibError> {
+    let passphrase = passphrase.unwrap_or("");
     let chain = parse_chain(chain)?;
     let mnemonic_str = decrypt_wallet_secret(wallet, passphrase, vault_path)?;
     let mnemonic = Mnemonic::from_phrase(&mnemonic_str)?;
@@ -378,11 +372,12 @@ pub fn sign_and_send(
     wallet: &str,
     chain: &str,
     tx_hex: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     index: Option<u32>,
     rpc_url: Option<&str>,
     vault_path: Option<&Path>,
 ) -> Result<SendResult, LwsLibError> {
+    let passphrase = passphrase.unwrap_or("");
     let chain_type = parse_chain(chain)?;
 
     // 1. Sign
@@ -618,7 +613,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        let info = create_wallet("test-wallet", "evm", None, "supersecretpass!", Some(vault))
+        let info = create_wallet("test-wallet", "evm", None, None, Some(vault))
             .unwrap();
 
         assert_eq!(info.name, "test-wallet");
@@ -635,8 +630,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        create_wallet("dup-name", "evm", None, "supersecretpass!", Some(vault)).unwrap();
-        let err = create_wallet("dup-name", "evm", None, "supersecretpass!", Some(vault));
+        create_wallet("dup-name", "evm", None, None, Some(vault)).unwrap();
+        let err = create_wallet("dup-name", "evm", None, None, Some(vault));
         assert!(err.is_err());
     }
 
@@ -645,7 +640,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        let info = create_wallet("lookup-test", "evm", None, "supersecretpass!", Some(vault))
+        let info = create_wallet("lookup-test", "evm", None, None, Some(vault))
             .unwrap();
 
         // By name
@@ -662,7 +657,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        let info = create_wallet("del-test", "evm", None, "supersecretpass!", Some(vault))
+        let info = create_wallet("del-test", "evm", None, None, Some(vault))
             .unwrap();
 
         delete_wallet(&info.id, Some(vault)).unwrap();
@@ -674,9 +669,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        create_wallet("export-test", "evm", None, "supersecretpass!", Some(vault)).unwrap();
+        create_wallet("export-test", "evm", None, None, Some(vault)).unwrap();
 
-        let secret = export_wallet("export-test", "supersecretpass!", Some(vault)).unwrap();
+        let secret = export_wallet("export-test", None, Some(vault)).unwrap();
         // The secret should be a valid mnemonic (12 words)
         assert_eq!(secret.split_whitespace().count(), 12);
     }
@@ -686,7 +681,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        create_wallet("old-name", "evm", None, "supersecretpass!", Some(vault)).unwrap();
+        create_wallet("old-name", "evm", None, None, Some(vault)).unwrap();
         rename_wallet("old-name", "new-name", Some(vault)).unwrap();
 
         let found = get_wallet("new-name", Some(vault)).unwrap();
@@ -706,7 +701,7 @@ mod tests {
             "imported",
             "evm",
             &phrase,
-            "supersecretpass!",
+            None,
             None,
             Some(vault),
         )
@@ -721,12 +716,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        create_wallet("signer", "evm", None, "supersecretpass!", Some(vault)).unwrap();
+        create_wallet("signer", "evm", None, None, Some(vault)).unwrap();
 
         // Sign a dummy 32-byte "transaction" (for EVM, sign_transaction hashes the input)
         let tx_hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
         let result =
-            sign_transaction("signer", "evm", tx_hex, "supersecretpass!", None, Some(vault))
+            sign_transaction("signer", "evm", tx_hex, None, None, Some(vault))
                 .unwrap();
 
         assert!(!result.signature.is_empty());
@@ -738,13 +733,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path();
 
-        create_wallet("msg-signer", "evm", None, "supersecretpass!", Some(vault)).unwrap();
+        create_wallet("msg-signer", "evm", None, None, Some(vault)).unwrap();
 
         let result = sign_message(
             "msg-signer",
             "evm",
             "hello world",
-            "supersecretpass!",
+            None,
             None,
             None,
             Some(vault),
@@ -754,13 +749,6 @@ mod tests {
         assert!(!result.signature.is_empty());
     }
 
-    #[test]
-    fn test_passphrase_too_short() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
 
-        let err = create_wallet("short-pass", "evm", None, "short", Some(vault));
-        assert!(err.is_err());
-    }
 
 }

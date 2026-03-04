@@ -68,7 +68,7 @@ pub fn derive_address(
 pub fn create_wallet(
     name: String,
     chain: String,
-    passphrase: String,
+    passphrase: Option<String>,
     words: Option<u32>,
     vault_path_opt: Option<String>,
 ) -> Result<WalletInfo> {
@@ -76,7 +76,7 @@ pub fn create_wallet(
         &name,
         &chain,
         words,
-        &passphrase,
+        passphrase.as_deref(),
         vault_path(vault_path_opt).as_deref(),
     )
     .map(WalletInfo::from)
@@ -89,7 +89,7 @@ pub fn import_wallet_mnemonic(
     name: String,
     chain: String,
     mnemonic: String,
-    passphrase: String,
+    passphrase: Option<String>,
     index: Option<u32>,
     vault_path_opt: Option<String>,
 ) -> Result<WalletInfo> {
@@ -97,7 +97,7 @@ pub fn import_wallet_mnemonic(
         &name,
         &chain,
         &mnemonic,
-        &passphrase,
+        passphrase.as_deref(),
         index,
         vault_path(vault_path_opt).as_deref(),
     )
@@ -111,14 +111,14 @@ pub fn import_wallet_private_key(
     name: String,
     chain: String,
     private_key_hex: String,
-    passphrase: String,
+    passphrase: Option<String>,
     vault_path_opt: Option<String>,
 ) -> Result<WalletInfo> {
     lws_lib::import_wallet_private_key(
         &name,
         &chain,
         &private_key_hex,
-        &passphrase,
+        passphrase.as_deref(),
         vault_path(vault_path_opt).as_deref(),
     )
     .map(WalletInfo::from)
@@ -151,12 +151,12 @@ pub fn delete_wallet(name_or_id: String, vault_path_opt: Option<String>) -> Resu
 #[napi]
 pub fn export_wallet(
     name_or_id: String,
-    passphrase: String,
+    passphrase: Option<String>,
     vault_path_opt: Option<String>,
 ) -> Result<String> {
     lws_lib::export_wallet(
         &name_or_id,
-        &passphrase,
+        passphrase.as_deref(),
         vault_path(vault_path_opt).as_deref(),
     )
     .map_err(map_err)
@@ -183,7 +183,7 @@ pub fn sign_transaction(
     wallet: String,
     chain: String,
     tx_hex: String,
-    passphrase: String,
+    passphrase: Option<String>,
     index: Option<u32>,
     vault_path_opt: Option<String>,
 ) -> Result<SignResult> {
@@ -191,7 +191,7 @@ pub fn sign_transaction(
         &wallet,
         &chain,
         &tx_hex,
-        &passphrase,
+        passphrase.as_deref(),
         index,
         vault_path(vault_path_opt).as_deref(),
     )
@@ -208,7 +208,7 @@ pub fn sign_message(
     wallet: String,
     chain: String,
     message: String,
-    passphrase: String,
+    passphrase: Option<String>,
     encoding: Option<String>,
     index: Option<u32>,
     vault_path_opt: Option<String>,
@@ -217,7 +217,7 @@ pub fn sign_message(
         &wallet,
         &chain,
         &message,
-        &passphrase,
+        passphrase.as_deref(),
         encoding.as_deref(),
         index,
         vault_path(vault_path_opt).as_deref(),
@@ -235,7 +235,7 @@ pub fn sign_and_send(
     wallet: String,
     chain: String,
     tx_hex: String,
-    passphrase: String,
+    passphrase: Option<String>,
     index: Option<u32>,
     rpc_url: Option<String>,
     vault_path_opt: Option<String>,
@@ -244,7 +244,7 @@ pub fn sign_and_send(
         &wallet,
         &chain,
         &tx_hex,
-        &passphrase,
+        passphrase.as_deref(),
         index,
         rpc_url.as_deref(),
         vault_path(vault_path_opt).as_deref(),

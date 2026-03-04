@@ -26,11 +26,11 @@ fn derive_address(mnemonic: &str, chain: &str, index: Option<u32>) -> PyResult<S
 
 /// Create a new wallet.
 #[pyfunction]
-#[pyo3(signature = (name, chain, passphrase, words=None, vault_path_opt=None))]
+#[pyo3(signature = (name, chain, passphrase=None, words=None, vault_path_opt=None))]
 fn create_wallet(
     name: &str,
     chain: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     words: Option<u32>,
     vault_path_opt: Option<String>,
 ) -> PyResult<PyObject> {
@@ -41,12 +41,12 @@ fn create_wallet(
 
 /// Import a wallet from a mnemonic phrase.
 #[pyfunction]
-#[pyo3(signature = (name, chain, mnemonic, passphrase, index=None, vault_path_opt=None))]
+#[pyo3(signature = (name, chain, mnemonic, passphrase=None, index=None, vault_path_opt=None))]
 fn import_wallet_mnemonic(
     name: &str,
     chain: &str,
     mnemonic: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     index: Option<u32>,
     vault_path_opt: Option<String>,
 ) -> PyResult<PyObject> {
@@ -59,12 +59,12 @@ fn import_wallet_mnemonic(
 
 /// Import a wallet from a hex-encoded private key.
 #[pyfunction]
-#[pyo3(signature = (name, chain, private_key_hex, passphrase, vault_path_opt=None))]
+#[pyo3(signature = (name, chain, private_key_hex, passphrase=None, vault_path_opt=None))]
 fn import_wallet_private_key(
     name: &str,
     chain: &str,
     private_key_hex: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     vault_path_opt: Option<String>,
 ) -> PyResult<PyObject> {
     let info = lws_lib::import_wallet_private_key(
@@ -107,10 +107,10 @@ fn delete_wallet(name_or_id: &str, vault_path_opt: Option<String>) -> PyResult<(
 
 /// Export a wallet's secret (mnemonic or private key).
 #[pyfunction]
-#[pyo3(signature = (name_or_id, passphrase, vault_path_opt=None))]
+#[pyo3(signature = (name_or_id, passphrase=None, vault_path_opt=None))]
 fn export_wallet(
     name_or_id: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     vault_path_opt: Option<String>,
 ) -> PyResult<String> {
     lws_lib::export_wallet(name_or_id, passphrase, vault_path(vault_path_opt).as_deref())
@@ -131,12 +131,12 @@ fn rename_wallet(
 
 /// Sign a transaction.
 #[pyfunction]
-#[pyo3(signature = (wallet, chain, tx_hex, passphrase, index=None, vault_path_opt=None))]
+#[pyo3(signature = (wallet, chain, tx_hex, passphrase=None, index=None, vault_path_opt=None))]
 fn sign_transaction(
     wallet: &str,
     chain: &str,
     tx_hex: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     index: Option<u32>,
     vault_path_opt: Option<String>,
 ) -> PyResult<PyObject> {
@@ -155,12 +155,12 @@ fn sign_transaction(
 
 /// Sign a message.
 #[pyfunction]
-#[pyo3(signature = (wallet, chain, message, passphrase, encoding=None, index=None, vault_path_opt=None))]
+#[pyo3(signature = (wallet, chain, message, passphrase=None, encoding=None, index=None, vault_path_opt=None))]
 fn sign_message(
     wallet: &str,
     chain: &str,
     message: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     encoding: Option<&str>,
     index: Option<u32>,
     vault_path_opt: Option<String>,
@@ -181,12 +181,12 @@ fn sign_message(
 
 /// Sign and broadcast a transaction.
 #[pyfunction]
-#[pyo3(signature = (wallet, chain, tx_hex, passphrase, index=None, rpc_url=None, vault_path_opt=None))]
+#[pyo3(signature = (wallet, chain, tx_hex, passphrase=None, index=None, rpc_url=None, vault_path_opt=None))]
 fn sign_and_send(
     wallet: &str,
     chain: &str,
     tx_hex: &str,
-    passphrase: &str,
+    passphrase: Option<&str>,
     index: Option<u32>,
     rpc_url: Option<&str>,
     vault_path_opt: Option<String>,

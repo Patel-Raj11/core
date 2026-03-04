@@ -1,0 +1,9 @@
+{
+  "name": "@local-wallet-standard/node-linux-arm64-gnu",
+  "version": "0.2.0",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "main": "lws-node.linux-arm64-gnu.node",
+  "files": ["lws-node.linux-arm64-gnu.node"],
+  "license": "MIT"
+}

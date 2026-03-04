@@ -19,8 +19,6 @@ import {
   signMessage,
 } from '../index.js';
 
-const PASSPHRASE = 'supersecretpass!';
-
 describe('@lws/node', () => {
   let vaultDir;
 
@@ -50,7 +48,7 @@ describe('@lws/node', () => {
   });
 
   it('creates, lists, gets, renames, exports, and deletes a wallet', () => {
-    const wallet = createWallet('test-wallet', 'evm', PASSPHRASE, 12, vaultDir);
+    const wallet = createWallet('test-wallet', 'evm', undefined, 12, vaultDir);
     assert.equal(wallet.name, 'test-wallet');
     assert.equal(wallet.chain, 'evm');
     assert.ok(wallet.address.startsWith('0x'));
@@ -70,7 +68,7 @@ describe('@lws/node', () => {
     assert.equal(renamed.id, wallet.id);
 
     // Export
-    const secret = exportWallet('renamed-wallet', PASSPHRASE, vaultDir);
+    const secret = exportWallet('renamed-wallet', undefined, vaultDir);
     assert.equal(secret.split(' ').length, 12);
 
     // Delete
@@ -87,7 +85,7 @@ describe('@lws/node', () => {
       'imported',
       'evm',
       phrase,
-      PASSPHRASE,
+      undefined,
       undefined,
       vaultDir,
     );
@@ -100,14 +98,14 @@ describe('@lws/node', () => {
   });
 
   it('signs a transaction', () => {
-    createWallet('signer', 'evm', PASSPHRASE, 12, vaultDir);
+    createWallet('signer', 'evm', undefined, 12, vaultDir);
 
     const txHex = 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef';
     const result = signTransaction(
       'signer',
       'evm',
       txHex,
-      PASSPHRASE,
+      undefined,
       undefined,
       vaultDir,
     );
@@ -119,13 +117,13 @@ describe('@lws/node', () => {
   });
 
   it('signs a message', () => {
-    createWallet('msg-signer', 'evm', PASSPHRASE, 12, vaultDir);
+    createWallet('msg-signer', 'evm', undefined, 12, vaultDir);
 
     const result = signMessage(
       'msg-signer',
       'evm',
       'hello world',
-      PASSPHRASE,
+      undefined,
       undefined,
       undefined,
       vaultDir,

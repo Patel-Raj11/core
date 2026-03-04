@@ -26,9 +26,6 @@ pub fn create(name: &str, chain_str: &str, words: u32, show_mnemonic: bool) -> R
         _ => return Err(CliError::InvalidArgs("--words must be 12 or 24".into())),
     };
 
-    // Prompt for passphrase (with confirmation)
-    let passphrase = vault::get_passphrase(true)?;
-
     // Generate mnemonic
     let mnemonic = Mnemonic::generate(strength)?;
     let signer = signer_for_chain(chain);
@@ -43,7 +40,7 @@ pub fn create(name: &str, chain_str: &str, words: u32, show_mnemonic: bool) -> R
 
     // Encrypt the mnemonic entropy
     let phrase = mnemonic.phrase();
-    let crypto_envelope = encrypt(phrase.expose(), &passphrase)?;
+    let crypto_envelope = encrypt(phrase.expose(), "")?;
     let crypto_json = serde_json::to_value(&crypto_envelope)?;
 
     let wallet_id = uuid::Uuid::new_v4().to_string();
@@ -105,8 +102,6 @@ pub fn import(
 
     let chain = parse_chain(chain_str)?;
     let signer = signer_for_chain(chain);
-    let passphrase = vault::get_passphrase(true)?;
-
     let (address, secret_bytes, key_type, path) = if use_mnemonic {
         let phrase = super::read_mnemonic()?;
         let mnemonic = Mnemonic::from_phrase(&phrase)?;
@@ -126,7 +121,7 @@ pub fn import(
         (addr, key_bytes, KeyType::PrivateKey, path)
     };
 
-    let crypto_envelope = encrypt(&secret_bytes, &passphrase)?;
+    let crypto_envelope = encrypt(&secret_bytes, "")?;
     let crypto_json = serde_json::to_value(&crypto_envelope)?;
 
     let wallet_id = uuid::Uuid::new_v4().to_string();
@@ -170,8 +165,7 @@ pub fn export(wallet_name: &str) -> Result<(), CliError> {
 
     let wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    let passphrase = vault::get_passphrase(false)?;
-    let secret = decrypt(&envelope, &passphrase)?;
+    let secret = decrypt(&envelope, "")?;
 
     let secret_str = String::from_utf8(secret.expose().to_vec())
         .map_err(|_| CliError::InvalidArgs("wallet contains invalid UTF-8 secret".into()))?;

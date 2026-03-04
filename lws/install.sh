@@ -174,33 +174,12 @@ install_python_bindings() {
     return
   fi
 
-  # Prefer pip3 command, fall back to python3 -m pip
-  local pip_cmd
-  if command -v pip3 &>/dev/null; then
-    pip_cmd="pip3"
-  else
-    pip_cmd="python3 -m pip"
-  fi
-
   info "Installing Python bindings..."
-
-  if ! command -v maturin &>/dev/null; then
-    info "Installing maturin..."
-    $pip_cmd install maturin
+  if pip3 install lws 2>/dev/null || python3 -m pip install lws 2>/dev/null; then
+    info "Python bindings installed successfully"
+  else
+    warn "Failed to install Python bindings from PyPI"
   fi
-
-  cd "$REPO_DIR/bindings/python"
-  python3 -m maturin build --release
-
-  local wheel
-  wheel="$(find "$REPO_DIR/bindings/python/target/wheels" -name '*.whl' | head -1)"
-  if [ -z "$wheel" ]; then
-    warn "Python bindings build failed — no wheel produced"
-    return
-  fi
-
-  $pip_cmd install "$wheel"
-  info "Python bindings installed successfully"
 }
 
 # --- Install Node bindings ---
@@ -215,18 +194,15 @@ install_node_bindings() {
   fi
 
   info "Installing Node bindings..."
-
-  cd "$REPO_DIR/bindings/node"
-  npm install --ignore-scripts
-  npm run build
-
-  npm install -g .
-  info "Node bindings installed successfully"
+  if npm install -g @local-wallet-standard/node 2>/dev/null; then
+    info "Node bindings installed successfully"
+  else
+    warn "Failed to install Node bindings from npm"
+  fi
 }
 
 # --- Install bindings ---
 install_bindings() {
-  ensure_repo_cloned
   install_python_bindings
   install_node_bindings
 }
