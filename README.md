@@ -60,13 +60,13 @@ cargo test --workspace
 
 | Command | Description |
 |---------|-------------|
-| `lws generate` | Generate a new BIP-39 mnemonic phrase |
-| `lws derive` | Derive an address from a mnemonic (via env or stdin) |
-| `lws sign-message` | Sign a message using a vault wallet with chain-specific formatting |
-| `lws sign-transaction` | Sign a raw transaction using a vault wallet |
-| `lws create-wallet` | Create a new wallet (generates mnemonic, encrypts, saves to vault) |
-| `lws list-wallets` | List all saved wallets in the vault |
-| `lws info` | Show vault path and supported chains |
+| `lws wallet create` | Create a new wallet (generates mnemonic, encrypts, saves to vault) |
+| `lws wallet list` | List all saved wallets in the vault |
+| `lws wallet info` | Show vault path and supported chains |
+| `lws sign message` | Sign a message using a vault wallet with chain-specific formatting |
+| `lws sign tx` | Sign a raw transaction using a vault wallet |
+| `lws mnemonic generate` | Generate a new BIP-39 mnemonic phrase |
+| `lws mnemonic derive` | Derive an address from a mnemonic (via env or stdin) |
 | `lws update` | Update lws to the latest version |
 | `lws uninstall` | Remove lws from the system |
 

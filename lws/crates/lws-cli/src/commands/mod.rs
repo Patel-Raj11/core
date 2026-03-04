@@ -1,7 +1,6 @@
 pub mod derive;
 pub mod generate;
 pub mod info;
-pub mod sign;
 pub mod sign_message;
 pub mod sign_transaction;
 pub mod uninstall;

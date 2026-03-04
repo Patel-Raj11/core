@@ -118,11 +118,13 @@ The enclave needs the vault passphrase to decrypt wallet files. LWS supports thr
 ### 1. Interactive Prompt (CLI mode)
 The enclave prompts for the passphrase on its own TTY. The passphrase never passes through the parent process.
 
-### 2. Environment Variable (daemon mode)
-The enclave reads `LWS_PASSPHRASE` from its own environment. The parent process launches the enclave with this variable set. After reading, the enclave SHOULD clear it from its own environment.
+### 2. File Descriptor (recommended for daemon mode)
+The passphrase is written to a file descriptor inherited by the enclave process. This is the RECOMMENDED delivery mechanism for non-interactive use because the passphrase never appears in process environment listings or `/proc/[pid]/environ`.
 
-### 3. File Descriptor (advanced)
-The passphrase is written to a file descriptor inherited by the enclave process. This avoids the passphrase appearing in process environment listings.
+### 3. Environment Variable (fallback for daemon mode)
+The enclave reads `LWS_PASSPHRASE` from its own environment. After reading, the enclave MUST immediately clear it from its own environment.
+
+> **Warning:** Environment variables are the least secure delivery mechanism. They are readable in `/proc/[pid]/environ` by any process running as the same user, appear in crash dumps, and are inherited by child processes. Use file descriptor delivery (option 2) when possible. If `LWS_PASSPHRASE` must be used, implementations MUST clear the variable from the process environment immediately after reading it.
 
 ## Threat Model
 
@@ -132,7 +134,7 @@ The passphrase is written to a file descriptor inherited by the enclave process.
 | Parent process reads child memory | OS enforces process memory isolation (ptrace protections) |
 | Key leaked to logs | Enclave has no logging of key material; audit log only records operations |
 | Core dump contains keys | Enclave disables core dumps (`prctl(PR_SET_DUMPABLE, 0)` on Linux, `PT_DENY_ATTACH` on macOS) |
-| Swap file contains keys | Enclave should `mlock()` key material pages to prevent swapping |
+| Swap file contains keys | Enclave MUST `mlock()` key material pages to prevent swapping. Implementations MUST log a warning if `mlock()` fails (e.g., due to `RLIMIT_MEMLOCK` limits). |
 | Cold boot / memory forensics | Keys wiped immediately after signing; window of exposure is milliseconds |
 | Compromised enclave binary | Binary integrity can be verified via checksum; future: code signing |
 | Passphrase brute force | Scrypt with n=262144 makes brute force computationally expensive |
@@ -147,6 +149,22 @@ LWS key isolation is one layer. For maximum security, deployments can add:
 4. **Key sharding**: Split the encrypted wallet across multiple files requiring quorum access (following Privy's SSS model).
 
 All backends implement the same enclave protocol, making them drop-in replacements.
+
+## Key Caching for Batch Performance
+
+Decrypting key material via scrypt (n=262144) takes ~0.5–1s per operation by design. For agents that send batches of transactions, this would create unacceptable latency if the KDF ran per-request.
+
+Implementations SHOULD maintain a short-lived, in-memory cache of derived key material with the following constraints:
+
+| Property | Requirement |
+|---|---|
+| TTL | No more than 30 seconds; 5 seconds recommended |
+| Max entries | Bounded (e.g., 32 entries) with LRU eviction |
+| Memory protection | Cached key material MUST be `mlock()`'d and zeroized on eviction |
+| Signal handling | Cache MUST be cleared on SIGTERM, SIGINT, and SIGHUP before process exit |
+| Cache key | Derived from `SHA-256(mnemonic \|\| passphrase \|\| derivation_path \|\| curve)` — never the raw mnemonic |
+
+The vault `unlock` operation (see [Enclave Protocol](#enclave-protocol)) also establishes a session that avoids repeated passphrase prompts, complementing the key cache for interactive workflows.
 
 ## Comparison with Industry Approaches
 

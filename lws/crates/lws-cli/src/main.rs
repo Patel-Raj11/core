@@ -18,23 +18,62 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Generate a new BIP-39 mnemonic phrase
-    Generate {
-        /// Number of words (12 or 24)
-        #[arg(long, default_value = "12")]
-        words: u32,
+    /// Manage wallets
+    Wallet {
+        #[command(subcommand)]
+        subcommand: WalletCommands,
     },
-    /// Derive an address from a mnemonic (reads from LWS_MNEMONIC env or stdin)
-    Derive {
+    /// Sign messages and transactions
+    Sign {
+        #[command(subcommand)]
+        subcommand: SignCommands,
+    },
+    /// Generate and derive from mnemonics
+    Mnemonic {
+        #[command(subcommand)]
+        subcommand: MnemonicCommands,
+    },
+    /// Update lws to the latest release
+    Update {
+        /// Re-download even if already on the latest version
+        #[arg(long)]
+        force: bool,
+    },
+    /// Uninstall lws from the system
+    Uninstall {
+        /// Also remove all wallet data and config (~/.lws)
+        #[arg(long)]
+        purge: bool,
+    },
+}
+
+#[derive(Subcommand)]
+enum WalletCommands {
+    /// Create a new wallet (generates mnemonic, encrypts and saves to vault)
+    Create {
+        /// Wallet name
+        #[arg(long)]
+        name: String,
         /// Chain type (evm, solana, bitcoin, cosmos, tron)
         #[arg(long)]
         chain: String,
-        /// Account index
-        #[arg(long, default_value = "0")]
-        index: u32,
+        /// Number of words (12 or 24)
+        #[arg(long, default_value = "12")]
+        words: u32,
+        /// Display the generated mnemonic (DANGEROUS — only for backup)
+        #[arg(long)]
+        show_mnemonic: bool,
     },
+    /// List all saved wallets
+    List,
+    /// Show vault path and supported chains
+    Info,
+}
+
+#[derive(Subcommand)]
+enum SignCommands {
     /// Sign a message with chain-specific formatting (EIP-191, Bitcoin message signing, etc.)
-    SignMessage {
+    Message {
         /// Chain type (evm, solana, bitcoin, cosmos, tron)
         #[arg(long)]
         chain: String,
@@ -58,7 +97,7 @@ enum Commands {
         json: bool,
     },
     /// Sign a transaction (accepts hex-encoded unsigned transaction bytes)
-    SignTransaction {
+    Tx {
         /// Chain type (evm, solana, bitcoin, cosmos, tron)
         #[arg(long)]
         chain: String,
@@ -75,52 +114,24 @@ enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// (Deprecated) Alias for sign-message with UTF-8 encoding
-    #[command(hide = true)]
-    Sign {
-        /// Chain type (evm, solana, bitcoin, cosmos, tron)
-        #[arg(long)]
-        chain: String,
-        /// Wallet name or ID (uses stored encrypted mnemonic)
-        #[arg(long, env = "LWS_WALLET")]
-        wallet: String,
-        /// Message to sign
-        #[arg(long)]
-        message: String,
-        /// Account index
-        #[arg(long, default_value = "0")]
-        index: u32,
-    },
-    /// Show vault path and supported chains
-    Info,
-    /// Create a new wallet (generates mnemonic, encrypts and saves to vault)
-    CreateWallet {
-        /// Wallet name
-        #[arg(long)]
-        name: String,
-        /// Chain type (evm, solana, bitcoin, cosmos, tron)
-        #[arg(long)]
-        chain: String,
+}
+
+#[derive(Subcommand)]
+enum MnemonicCommands {
+    /// Generate a new BIP-39 mnemonic phrase
+    Generate {
         /// Number of words (12 or 24)
         #[arg(long, default_value = "12")]
         words: u32,
-        /// Display the generated mnemonic (DANGEROUS — only for backup)
-        #[arg(long)]
-        show_mnemonic: bool,
     },
-    /// List all saved wallets
-    ListWallets,
-    /// Update lws to the latest release
-    Update {
-        /// Re-download even if already on the latest version
+    /// Derive an address from a mnemonic (reads from LWS_MNEMONIC env or stdin)
+    Derive {
+        /// Chain type (evm, solana, bitcoin, cosmos, tron)
         #[arg(long)]
-        force: bool,
-    },
-    /// Uninstall lws from the system
-    Uninstall {
-        /// Also remove all wallet data and config (~/.lws)
-        #[arg(long)]
-        purge: bool,
+        chain: String,
+        /// Account index
+        #[arg(long, default_value = "0")]
+        index: u32,
     },
 }
 
@@ -174,46 +185,46 @@ fn main() {
 
 fn run(cli: Cli) -> Result<(), CliError> {
     match cli.command {
-        Commands::Generate { words } => commands::generate::run(words),
-        Commands::Derive { chain, index } => commands::derive::run(&chain, index),
-        Commands::SignMessage {
-            chain,
-            wallet,
-            message,
-            encoding,
-            typed_data,
-            index,
-            json,
-        } => commands::sign_message::run(
-            &chain,
-            &wallet,
-            &message,
-            &encoding,
-            typed_data.as_deref(),
-            index,
-            json,
-        ),
-        Commands::SignTransaction {
-            chain,
-            wallet,
-            tx,
-            index,
-            json,
-        } => commands::sign_transaction::run(&chain, &wallet, &tx, index, json),
-        Commands::Sign {
-            chain,
-            wallet,
-            message,
-            index,
-        } => commands::sign::run(&chain, &wallet, &message, index),
-        Commands::Info => commands::info::run(),
-        Commands::CreateWallet {
-            name,
-            chain,
-            words,
-            show_mnemonic,
-        } => commands::wallet::create(&name, &chain, words, show_mnemonic),
-        Commands::ListWallets => commands::wallet::list(),
+        Commands::Wallet { subcommand } => match subcommand {
+            WalletCommands::Create {
+                name,
+                chain,
+                words,
+                show_mnemonic,
+            } => commands::wallet::create(&name, &chain, words, show_mnemonic),
+            WalletCommands::List => commands::wallet::list(),
+            WalletCommands::Info => commands::info::run(),
+        },
+        Commands::Sign { subcommand } => match subcommand {
+            SignCommands::Message {
+                chain,
+                wallet,
+                message,
+                encoding,
+                typed_data,
+                index,
+                json,
+            } => commands::sign_message::run(
+                &chain,
+                &wallet,
+                &message,
+                &encoding,
+                typed_data.as_deref(),
+                index,
+                json,
+            ),
+            SignCommands::Tx {
+                chain,
+                wallet,
+                tx,
+                index,
+                json,
+            } => commands::sign_transaction::run(&chain, &wallet, &tx, index, json),
+        },
+        Commands::Mnemonic { subcommand } => match subcommand {
+            MnemonicCommands::Generate { words } => commands::generate::run(words),
+            MnemonicCommands::Derive { chain, index } => commands::derive::run(&chain, index),
+        },
         Commands::Update { force } => commands::update::run(force),
         Commands::Uninstall { purge } => commands::uninstall::run(purge),
     }

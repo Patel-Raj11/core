@@ -173,7 +173,7 @@ Storing the mnemonic (rather than individual private keys) enables a single encr
 The vault passphrase is used to derive the encryption key via the configured KDF. LWS does NOT define how the passphrase is obtained — this is deliberately left to the implementation:
 
 - **Interactive CLI**: Prompt at first use, optionally cache in OS keychain for a session
-- **Agent/daemon mode**: Read from an environment variable (`LWS_PASSPHRASE`), a file descriptor, or a hardware token
+- **Agent/daemon mode**: Read from a file descriptor (RECOMMENDED), an environment variable (`LWS_PASSPHRASE`), or a hardware token. Environment variables are the least secure option — they are readable via `/proc/[pid]/environ` by same-user processes and leak into crash dumps and child process environments. Implementations using `LWS_PASSPHRASE` MUST clear it from the process environment immediately after reading.
 - **Unlocked mode** (development only): A config flag that uses a well-known passphrase — MUST produce a visible warning
 
 The passphrase MUST be at least 12 characters. Implementations SHOULD enforce this at wallet creation time.
