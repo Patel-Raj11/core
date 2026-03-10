@@ -2,7 +2,7 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: $0 <version> --python|--node|--all" >&2
+  echo "Usage: $0 <version> --python|--node|--rust|--all" >&2
   exit 1
 }
 
@@ -43,6 +43,24 @@ set_node_version() {
     package.json > tmp.json && mv tmp.json package.json
 }
 
+set_rust_version() {
+  local crates_dir="$REPO_ROOT/lws/crates"
+
+  # Update package versions
+  for crate in lws-core lws-signer lws-lib lws-cli; do
+    sed -i.bak "s/^version = \".*\"/version = \"$VERSION\"/" \
+      "$crates_dir/$crate/Cargo.toml"
+    rm -f "$crates_dir/$crate/Cargo.toml.bak"
+  done
+
+  # Update internal dependency version specifiers
+  for crate in lws-signer lws-lib lws-cli; do
+    sed -i.bak -E "s/(lws-(core|signer|lib) = \{[^}]*version = \")=[^\"]*\"/\1=$VERSION\"/" \
+      "$crates_dir/$crate/Cargo.toml"
+    rm -f "$crates_dir/$crate/Cargo.toml.bak"
+  done
+}
+
 set_skill_version() {
   sed -i.bak "s/^version: .*/version: $VERSION/" \
     "$REPO_ROOT/skills/lws/SKILL.md"
@@ -52,6 +70,7 @@ set_skill_version() {
 case "$SCOPE" in
   --python) set_python_version ;;
   --node)   set_node_version ;;
-  --all)    set_python_version; set_node_version; set_skill_version ;;
+  --rust)   set_rust_version ;;
+  --all)    set_python_version; set_node_version; set_rust_version; set_skill_version ;;
   *) usage ;;
 esac

@@ -1,14 +1,17 @@
 [package]
 name = "lws-signer"
-version = "0.2.0"
+version = "0.2.25"
 edition = "2021"
+license = "MIT"
+description = "Cryptographic signing and key management for the Local Wallet Standard"
+repository = "https://github.com/dawnlabsai/lws"
 
 [features]
 default = []
 fast-kdf = []
 
 [dependencies]
-lws-core = { path = "../lws-core" }
+lws-core = { path = "../lws-core", version = "=0.2.25" }
 k256 = { version = "0.13", features = ["ecdsa", "arithmetic"] }
 ed25519-dalek = { version = "2", features = ["hazmat"] }
 coins-bip32 = "0.11"
