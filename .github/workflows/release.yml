@@ -155,10 +155,6 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - name: Purge shields.io cache
-        if: success()
-        run: curl -sX POST https://purge.shields.io/pypi/v/local-wallet-standard
-
   node-addons:
     strategy:
       matrix:
@@ -310,10 +306,6 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --ignore-scripts
-
-      - name: Purge shields.io cache
-        if: success()
-        run: curl -sX POST https://purge.shields.io/npm/v/@local-wallet-standard/node
 
   release:
     needs: [build]

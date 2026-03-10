@@ -48,21 +48,27 @@ impl ChainSigner for SolanaSigner {
         private_key: &[u8],
         tx_bytes: &[u8],
     ) -> Result<SignOutput, SignerError> {
+        // Ed25519 signs raw message bytes directly (no prehashing).
+        // Callers passing a full serialized Solana transaction (with signature
+        // slots) must call extract_signable_bytes() first.
+        self.sign(private_key, tx_bytes)
+    }
+
+    fn extract_signable_bytes<'a>(&self, tx_bytes: &'a [u8]) -> Result<&'a [u8], SignerError> {
         // Solana serialized transaction format:
         // [compact-u16: num_signatures] [64-byte signatures...] [message...]
-        // We must sign only the message portion, not the signature slot placeholders.
+        // Return only the message portion.
         if tx_bytes.is_empty() {
             return Err(SignerError::InvalidTransaction("empty transaction".into()));
         }
         let num_sigs = tx_bytes[0] as usize;
         let message_start = 1 + num_sigs * 64;
-        if tx_bytes.len() < message_start {
+        if tx_bytes.len() <= message_start {
             return Err(SignerError::InvalidTransaction(
                 "transaction too short for declared signature slots".into(),
             ));
         }
-        let message = &tx_bytes[message_start..];
-        self.sign(private_key, message)
+        Ok(&tx_bytes[message_start..])
     }
 
     fn encode_signed_transaction(
@@ -210,10 +216,7 @@ mod tests {
     }
 
     #[test]
-    fn test_sign_transaction_signs_message_portion_only() {
-        let privkey =
-            hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
-                .unwrap();
+    fn test_extract_signable_bytes() {
         let signer = SolanaSigner;
 
         // Build a minimal Solana serialized tx: [1 sig slot] [64 zero bytes] [message]
@@ -221,21 +224,38 @@ mod tests {
         tx_bytes.extend_from_slice(&[0u8; 64]); // placeholder zero signature
         tx_bytes.extend_from_slice(b"fake_message_payload");
 
-        // sign_transaction should sign only the message portion
-        let output = signer.sign_transaction(&privkey, &tx_bytes).unwrap();
-
-        // Verify the signature is over the message portion, not the full buffer
-        let message = &tx_bytes[65..];
-        let signing_key = SigningKey::from_bytes(&privkey.try_into().unwrap());
-        let verifying_key = signing_key.verifying_key();
-        let sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
-        verifying_key
-            .verify(message, &sig)
-            .expect("signature should verify against the message portion only");
+        let signable = signer.extract_signable_bytes(&tx_bytes).unwrap();
+        assert_eq!(signable, b"fake_message_payload");
     }
 
     #[test]
-    fn test_encode_signed_transaction_splices_signature() {
+    fn test_extract_signable_bytes_errors() {
+        let signer = SolanaSigner;
+
+        // Empty input
+        assert!(signer.extract_signable_bytes(&[]).is_err());
+
+        // Too short for declared signature slots
+        let short = vec![0x01, 0x00]; // claims 1 sig slot but only 1 byte after header
+        assert!(signer.extract_signable_bytes(&short).is_err());
+    }
+
+    #[test]
+    fn test_sign_transaction_is_passthrough() {
+        // sign_transaction signs whatever bytes it receives (caller strips headers)
+        let privkey =
+            hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+                .unwrap();
+        let signer = SolanaSigner;
+        let message = b"fake_message_payload";
+
+        let via_sign = signer.sign(&privkey, message).unwrap();
+        let via_sign_tx = signer.sign_transaction(&privkey, message).unwrap();
+        assert_eq!(via_sign.signature, via_sign_tx.signature);
+    }
+
+    #[test]
+    fn test_full_sign_and_encode_pipeline() {
         let privkey =
             hex::decode("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
                 .unwrap();
@@ -246,9 +266,9 @@ mod tests {
         tx_bytes.extend_from_slice(&[0u8; 64]); // placeholder zero signature
         tx_bytes.extend_from_slice(b"fake_message_payload");
 
-        // sign_transaction now correctly signs only the message portion
-        let output = signer.sign_transaction(&privkey, &tx_bytes).unwrap();
-
+        // Pipeline: extract → sign → encode (mirrors sign_and_send in ops.rs)
+        let signable = signer.extract_signable_bytes(&tx_bytes).unwrap();
+        let output = signer.sign_transaction(&privkey, signable).unwrap();
         let signed = signer
             .encode_signed_transaction(&tx_bytes, &output)
             .unwrap();
@@ -258,6 +278,15 @@ mod tests {
         // The rest of the tx should be unchanged
         assert_eq!(&signed[65..], &tx_bytes[65..]);
         assert_eq!(signed.len(), tx_bytes.len());
+
+        // Verify the signature is over the message portion
+        let message = &tx_bytes[65..];
+        let signing_key = SigningKey::from_bytes(&privkey.try_into().unwrap());
+        let verifying_key = signing_key.verifying_key();
+        let sig = ed25519_dalek::Signature::from_bytes(&output.signature.try_into().unwrap());
+        verifying_key
+            .verify(message, &sig)
+            .expect("signature should verify against the message portion only");
     }
 
     #[test]

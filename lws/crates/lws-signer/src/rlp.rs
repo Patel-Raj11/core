@@ -224,4 +224,103 @@ mod tests {
         let s = [0u8; 32];
         assert!(encode_signed_typed_tx(&legacy, 0, &r, &s).is_err());
     }
+
+    #[test]
+    fn test_v_zero_encoded_as_rlp_integer_zero() {
+        // BUG TEST: In RLP, integer 0 is encoded as the empty byte string → [0x80].
+        // encode_bytes(&[0]) returns [0x00] (the byte value 0), which is the RLP
+        // encoding of a single-byte string containing 0x00 — NOT integer zero.
+        // For EIP-1559/EIP-2930 transactions, yParity=0 must be encoded as integer 0.
+        //
+        // The correct encoding uses strip_leading_zeros:
+        //   strip_leading_zeros(&[0]) → &[]
+        //   encode_bytes(&[])         → [0x80]
+
+        // First, verify the underlying primitives:
+        assert_eq!(
+            strip_leading_zeros(&[0]),
+            &[] as &[u8],
+            "strip_leading_zeros(&[0]) should yield empty slice"
+        );
+        assert_eq!(
+            encode_bytes(&[]),
+            vec![0x80],
+            "encode_bytes of empty slice should be [0x80] (RLP integer 0)"
+        );
+        assert_eq!(
+            encode_bytes(&[0]),
+            vec![0x00],
+            "encode_bytes(&[0]) is [0x00] — correct for a byte string, wrong for integer 0"
+        );
+
+        // Now verify the signed transaction encoding with v=0:
+        let items: Vec<u8> = [
+            encode_bytes(&[1]), // chain_id = 1
+            encode_bytes(&[]),  // nonce = 0
+            encode_bytes(&[]),  // maxPriorityFeePerGas = 0
+            encode_bytes(&[]),  // maxFeePerGas = 0
+            encode_bytes(&[]),  // gasLimit = 0
+            encode_bytes(&[]),  // to = empty
+            encode_bytes(&[]),  // value = 0
+            encode_bytes(&[]),  // data = empty
+            encode_list(&[]),   // accessList = empty
+        ]
+        .concat();
+
+        let mut unsigned_tx = vec![0x02];
+        unsigned_tx.extend_from_slice(&encode_list(&items));
+
+        let r = [0u8; 32];
+        let s = [0u8; 32];
+        let v = 0u8; // recovery id 0
+
+        let signed = encode_signed_typed_tx(&unsigned_tx, v, &r, &s).unwrap();
+
+        // Decode the signed list to inspect the appended v field
+        let (offset, length) = decode_length(&signed[1..]).unwrap();
+        let signed_payload = &signed[1 + offset..1 + offset + length];
+
+        // The original unsigned items occupy `items.len()` bytes.
+        // After them come v, r, s as RLP-encoded items.
+        let v_and_rs = &signed_payload[items.len()..];
+
+        // The first byte of the appended data is the RLP-encoded v.
+        // For v=0 (integer zero), it MUST be 0x80 (empty byte string).
+        assert_eq!(
+            v_and_rs[0], 0x80,
+            "v=0 must be RLP-encoded as 0x80 (integer zero), not 0x00 (byte value zero)"
+        );
+    }
+
+    #[test]
+    fn test_v_one_encoded_correctly() {
+        // v=1 should be encoded as [0x01] — a single byte < 0x80 is its own RLP encoding.
+        let items: Vec<u8> = [
+            encode_bytes(&[1]),
+            encode_bytes(&[]),
+            encode_bytes(&[]),
+            encode_bytes(&[]),
+            encode_bytes(&[]),
+            encode_bytes(&[]),
+            encode_bytes(&[]),
+            encode_bytes(&[]),
+            encode_list(&[]),
+        ]
+        .concat();
+
+        let mut unsigned_tx = vec![0x02];
+        unsigned_tx.extend_from_slice(&encode_list(&items));
+
+        let r = [0u8; 32];
+        let s = [0u8; 32];
+        let v = 1u8;
+
+        let signed = encode_signed_typed_tx(&unsigned_tx, v, &r, &s).unwrap();
+
+        let (offset, length) = decode_length(&signed[1..]).unwrap();
+        let signed_payload = &signed[1 + offset..1 + offset + length];
+        let v_and_rs = &signed_payload[items.len()..];
+
+        assert_eq!(v_and_rs[0], 0x01, "v=1 must be RLP-encoded as 0x01");
+    }
 }

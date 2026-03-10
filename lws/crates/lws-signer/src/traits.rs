@@ -35,11 +35,29 @@ pub trait ChainSigner: Send + Sync {
 
     /// Sign an unsigned transaction. Each chain hashes the raw transaction
     /// bytes according to its own rules before signing.
+    ///
+    /// `tx_bytes` should be the signable payload — i.e. the bytes that the
+    /// chain's validators expect the signature to cover. For most chains this
+    /// is the serialized transaction itself (which gets hashed internally).
+    /// Callers that hold a *full* serialized container (e.g. Solana's
+    /// `[sig-slots | message]`) should call [`extract_signable_bytes`] first.
     fn sign_transaction(
         &self,
         private_key: &[u8],
         tx_bytes: &[u8],
     ) -> Result<SignOutput, SignerError>;
+
+    /// Extract the signable portion from a full serialized transaction.
+    ///
+    /// Some wire formats include non-signed metadata (e.g. Solana prepends
+    /// signature-slot placeholders). This method strips that metadata and
+    /// returns only the bytes that must be signed.
+    ///
+    /// The default implementation returns the input unchanged — most chains
+    /// sign the full serialized blob (after internal hashing).
+    fn extract_signable_bytes<'a>(&self, tx_bytes: &'a [u8]) -> Result<&'a [u8], SignerError> {
+        Ok(tx_bytes)
+    }
 
     /// Encode the full signed transaction from the unsigned transaction bytes
     /// and the signing output. Returns the bytes suitable for broadcasting.
