@@ -77,6 +77,9 @@ enum WalletCommands {
         /// Import a raw private key (from LWS_PRIVATE_KEY env or stdin)
         #[arg(long)]
         private_key: bool,
+        /// Source chain for private key import (determines curve: evm/bitcoin/cosmos/tron = secp256k1, solana/ton = ed25519)
+        #[arg(long)]
+        chain: Option<String>,
         /// Account index for HD derivation (mnemonic only)
         #[arg(long, default_value = "0")]
         index: u32,
@@ -264,8 +267,9 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 name,
                 mnemonic,
                 private_key,
+                chain,
                 index,
-            } => commands::wallet::import(&name, mnemonic, private_key, index),
+            } => commands::wallet::import(&name, mnemonic, private_key, chain.as_deref(), index),
             WalletCommands::Export { wallet } => commands::wallet::export(&wallet),
             WalletCommands::Delete { wallet, confirm } => {
                 commands::wallet::delete(&wallet, confirm)

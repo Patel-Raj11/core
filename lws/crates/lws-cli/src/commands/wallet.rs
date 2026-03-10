@@ -75,6 +75,7 @@ pub fn import(
     name: &str,
     use_mnemonic: bool,
     use_private_key: bool,
+    chain: Option<&str>,
     index: u32,
 ) -> Result<(), CliError> {
     if use_mnemonic == use_private_key {
@@ -94,7 +95,16 @@ pub fn import(
         let hex_trimmed = hex_key.strip_prefix("0x").unwrap_or(&hex_key);
         let key_bytes = hex::decode(hex_trimmed)
             .map_err(|e| CliError::InvalidArgs(format!("invalid hex private key: {e}")))?;
-        let accts = derive_all_accounts_from_key(&key_bytes)?;
+        // Determine curve from source chain (default: secp256k1)
+        let source_curve = match chain {
+            Some(c) => {
+                let parsed = lws_core::parse_chain(c)
+                    .map_err(|e| CliError::InvalidArgs(e))?;
+                signer_for_chain(parsed.chain_type).curve()
+            }
+            None => lws_signer::Curve::Secp256k1,
+        };
+        let accts = derive_all_accounts_from_key(&key_bytes, source_curve)?;
         (accts, key_bytes, KeyType::PrivateKey)
     };
 
@@ -136,25 +146,33 @@ pub fn export(wallet_name: &str) -> Result<(), CliError> {
 
     let wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    let secret = decrypt(&envelope, "")?;
 
-    let secret_str = String::from_utf8(secret.expose().to_vec())
-        .map_err(|_| CliError::InvalidArgs("wallet contains invalid UTF-8 secret".into()))?;
+    // Try empty passphrase first, then prompt if it fails
+    let secret = match decrypt(&envelope, "") {
+        Ok(s) => s,
+        Err(_) => {
+            let passphrase = super::read_passphrase();
+            decrypt(&envelope, &passphrase)?
+        }
+    };
 
     match wallet.key_type {
         KeyType::Mnemonic => {
+            let phrase = String::from_utf8(secret.expose().to_vec())
+                .map_err(|_| CliError::InvalidArgs("wallet contains invalid mnemonic".into()))?;
             eprintln!();
             eprintln!("WARNING: The mnemonic below provides FULL ACCESS to this wallet.");
             eprintln!("Do not share it. Store it securely offline.");
             eprintln!();
-            println!("{secret_str}");
+            println!("{phrase}");
         }
         KeyType::PrivateKey => {
+            let hex_key = hex::encode(secret.expose());
             eprintln!();
             eprintln!("WARNING: The private key below provides FULL ACCESS to this wallet.");
             eprintln!("Do not share it. Store it securely offline.");
             eprintln!();
-            println!("{secret_str}");
+            println!("{hex_key}");
         }
     }
 
@@ -251,11 +269,17 @@ fn derive_all_accounts_from_mnemonic(
     Ok(accounts)
 }
 
-fn derive_all_accounts_from_key(key_bytes: &[u8]) -> Result<Vec<WalletAccount>, CliError> {
+fn derive_all_accounts_from_key(
+    key_bytes: &[u8],
+    source_curve: lws_signer::Curve,
+) -> Result<Vec<WalletAccount>, CliError> {
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
-        let chain = default_chain_for_type(*ct);
         let signer = signer_for_chain(*ct);
+        if signer.curve() != source_curve {
+            continue;
+        }
+        let chain = default_chain_for_type(*ct);
         let address = signer.derive_address(key_bytes)?;
         accounts.push(WalletAccount {
             account_id: format!("{}:{}", chain.chain_id, address),

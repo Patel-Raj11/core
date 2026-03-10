@@ -1,7 +1,7 @@
 use lws_signer::chains::EvmSigner;
 use lws_signer::{signer_for_chain, HdDeriver, Mnemonic};
-use zeroize::Zeroize;
 
+use super::WalletSecret;
 use crate::{parse_chain, CliError};
 
 pub fn run(
@@ -14,15 +14,19 @@ pub fn run(
     json_output: bool,
 ) -> Result<(), CliError> {
     let chain = parse_chain(chain_str)?;
-    let mut mnemonic_str = super::resolve_mnemonic(wallet_name)?;
-    let mnemonic = Mnemonic::from_phrase(&mnemonic_str)?;
-    mnemonic_str.zeroize();
+    let wallet_secret = super::resolve_wallet_secret(wallet_name)?;
 
     let signer = signer_for_chain(chain.chain_type);
-    let path = signer.default_derivation_path(index);
-    let curve = signer.curve();
 
-    let key = HdDeriver::derive_from_mnemonic_cached(&mnemonic, "", &path, curve)?;
+    let key = match wallet_secret {
+        WalletSecret::Mnemonic(phrase) => {
+            let mnemonic = Mnemonic::from_phrase(&phrase)?;
+            let path = signer.default_derivation_path(index);
+            let curve = signer.curve();
+            HdDeriver::derive_from_mnemonic_cached(&mnemonic, "", &path, curve)?
+        }
+        WalletSecret::PrivateKey(secret) => secret,
+    };
 
     let output = if let Some(td_json) = typed_data {
         if chain.chain_type != lws_core::ChainType::Evm {

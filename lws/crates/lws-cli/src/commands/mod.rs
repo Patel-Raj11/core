@@ -10,8 +10,9 @@ pub mod update;
 pub mod wallet;
 
 use crate::{vault, CliError};
+use lws_core::KeyType;
 use lws_signer::process_hardening::clear_env_var;
-use lws_signer::CryptoEnvelope;
+use lws_signer::{CryptoEnvelope, SecretBytes};
 use std::io::{self, BufRead, IsTerminal, Write};
 
 /// Read mnemonic from LWS_MNEMONIC env var or stdin. Used by the `derive` command.
@@ -70,11 +71,50 @@ pub fn read_private_key() -> Result<String, CliError> {
     Ok(trimmed)
 }
 
-/// Look up a wallet by name or ID, decrypt its mnemonic, and return it.
-pub fn resolve_mnemonic(wallet_name: &str) -> Result<String, CliError> {
+/// Resolved wallet secret — either a mnemonic phrase or raw private key bytes.
+pub enum WalletSecret {
+    Mnemonic(String),
+    PrivateKey(SecretBytes),
+}
+
+/// Read a passphrase from LWS_PASSPHRASE env var or prompt interactively.
+pub fn read_passphrase() -> String {
+    if let Some(value) = clear_env_var("LWS_PASSPHRASE") {
+        return value;
+    }
+    let stdin = io::stdin();
+    if stdin.is_terminal() {
+        eprint!("Passphrase (empty for none): ");
+        io::stderr().flush().ok();
+        let mut line = String::new();
+        stdin.lock().read_line(&mut line).unwrap_or(0);
+        line.trim().to_string()
+    } else {
+        String::new()
+    }
+}
+
+/// Look up a wallet by name or ID, decrypt it, and return the secret.
+/// Handles both mnemonic and private key wallets.
+pub fn resolve_wallet_secret(wallet_name: &str) -> Result<WalletSecret, CliError> {
     let wallet = vault::load_wallet_by_name_or_id(wallet_name)?;
     let envelope: CryptoEnvelope = serde_json::from_value(wallet.crypto.clone())?;
-    let secret = lws_signer::decrypt(&envelope, "")?;
-    String::from_utf8(secret.expose().to_vec())
-        .map_err(|_| CliError::InvalidArgs("wallet contains invalid UTF-8 mnemonic".into()))
+
+    // Try empty passphrase first, then prompt if it fails
+    let secret = match lws_signer::decrypt(&envelope, "") {
+        Ok(s) => s,
+        Err(_) => {
+            let passphrase = read_passphrase();
+            lws_signer::decrypt(&envelope, &passphrase)?
+        }
+    };
+
+    match wallet.key_type {
+        KeyType::Mnemonic => {
+            let phrase = String::from_utf8(secret.expose().to_vec())
+                .map_err(|_| CliError::InvalidArgs("wallet contains invalid mnemonic".into()))?;
+            Ok(WalletSecret::Mnemonic(phrase))
+        }
+        KeyType::PrivateKey => Ok(WalletSecret::PrivateKey(secret)),
+    }
 }

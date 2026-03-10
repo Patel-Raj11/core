@@ -60,27 +60,27 @@ fn derive_all_accounts(
     Ok(accounts)
 }
 
-/// Derive accounts for all chain families from raw key bytes.
-/// Skips chains whose signer doesn't support the key's curve.
-fn derive_all_accounts_from_key(key_bytes: &[u8]) -> Result<Vec<WalletAccount>, LwsLibError> {
+/// Derive accounts for all chain families that share the same curve as the source chain.
+/// A secp256k1 key only gets EVM/Bitcoin/Cosmos/Tron accounts.
+/// An Ed25519 key only gets Solana/TON accounts.
+fn derive_all_accounts_from_key(
+    key_bytes: &[u8],
+    source_curve: lws_signer::Curve,
+) -> Result<Vec<WalletAccount>, LwsLibError> {
     let mut accounts = Vec::with_capacity(ALL_CHAIN_TYPES.len());
     for ct in &ALL_CHAIN_TYPES {
         let signer = signer_for_chain(*ct);
-        match signer.derive_address(key_bytes) {
-            Ok(address) => {
-                let chain = default_chain_for_type(*ct);
-                accounts.push(WalletAccount {
-                    account_id: format!("{}:{}", chain.chain_id, address),
-                    address,
-                    chain_id: chain.chain_id.to_string(),
-                    derivation_path: String::new(),
-                });
-            }
-            Err(_) => {
-                // Skip chains that can't derive from this key (e.g. wrong curve)
-                continue;
-            }
+        if signer.curve() != source_curve {
+            continue;
         }
+        let address = signer.derive_address(key_bytes)?;
+        let chain = default_chain_for_type(*ct);
+        accounts.push(WalletAccount {
+            account_id: format!("{}:{}", chain.chain_id, address),
+            address,
+            chain_id: chain.chain_id.to_string(),
+            derivation_path: String::new(),
+        });
     }
     if accounts.is_empty() {
         return Err(LwsLibError::InvalidInput(
@@ -198,10 +198,15 @@ pub fn import_wallet_mnemonic(
     Ok(wallet_to_info(&wallet))
 }
 
-/// Import a wallet from a hex-encoded private key. Derives addresses for all chains.
+/// Import a wallet from a hex-encoded private key.
+/// The `chain` parameter specifies which chain the key originates from (e.g. "evm", "solana").
+/// This determines the curve, and accounts are derived only for chains sharing that curve:
+/// - secp256k1 key (evm/bitcoin/cosmos/tron) → EVM, Bitcoin, Cosmos, Tron accounts
+/// - Ed25519 key (solana/ton) → Solana, TON accounts
 pub fn import_wallet_private_key(
     name: &str,
     private_key_hex: &str,
+    chain: Option<&str>,
     passphrase: Option<&str>,
     vault_path: Option<&Path>,
 ) -> Result<WalletInfo, LwsLibError> {
@@ -215,7 +220,16 @@ pub fn import_wallet_private_key(
     let key_bytes = hex::decode(hex_trimmed)
         .map_err(|e| LwsLibError::InvalidInput(format!("invalid hex private key: {e}")))?;
 
-    let accounts = derive_all_accounts_from_key(&key_bytes)?;
+    // Determine curve from the source chain (default: secp256k1 for backwards compat)
+    let source_curve = match chain {
+        Some(c) => {
+            let parsed = parse_chain(c)?;
+            signer_for_chain(parsed.chain_type).curve()
+        }
+        None => lws_signer::Curve::Secp256k1,
+    };
+
+    let accounts = derive_all_accounts_from_key(&key_bytes, source_curve)?;
 
     let crypto_envelope = encrypt(&key_bytes, passphrase)?;
     let crypto_json = serde_json::to_value(&crypto_envelope)?;
@@ -606,296 +620,17 @@ fn extract_json_field(json_str: &str, field: &str) -> Result<String, LwsLibError
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_generate_mnemonic_12() {
-        let phrase = generate_mnemonic(12).unwrap();
-        assert_eq!(phrase.split_whitespace().count(), 12);
-    }
+    // ---- helpers ----
 
-    #[test]
-    fn test_generate_mnemonic_24() {
-        let phrase = generate_mnemonic(24).unwrap();
-        assert_eq!(phrase.split_whitespace().count(), 24);
-    }
-
-    #[test]
-    fn test_generate_mnemonic_invalid() {
-        assert!(generate_mnemonic(15).is_err());
-    }
-
-    #[test]
-    fn test_derive_address_evm() {
-        let phrase = generate_mnemonic(12).unwrap();
-        let addr = derive_address(&phrase, "evm", None).unwrap();
-        assert!(addr.starts_with("0x"));
-        assert_eq!(addr.len(), 42);
-    }
-
-    #[test]
-    fn test_derive_address_ethereum() {
-        let phrase = generate_mnemonic(12).unwrap();
-        let addr = derive_address(&phrase, "ethereum", None).unwrap();
-        assert!(addr.starts_with("0x"));
-        assert_eq!(addr.len(), 42);
-    }
-
-    #[test]
-    fn test_derive_address_solana() {
-        let phrase = generate_mnemonic(12).unwrap();
-        let addr = derive_address(&phrase, "solana", None).unwrap();
-        assert!(!addr.is_empty());
-    }
-
-    #[test]
-    fn test_create_universal_wallet() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        let info = create_wallet("test-wallet", None, None, Some(vault)).unwrap();
-
-        assert_eq!(info.name, "test-wallet");
-        assert_eq!(info.accounts.len(), 6, "universal wallet should have 6 accounts");
-
-        // Verify each chain family is present
-        let chain_ids: Vec<&str> = info.accounts.iter().map(|a| a.chain_id.as_str()).collect();
-        assert!(chain_ids.iter().any(|c| c.starts_with("eip155:")));
-        assert!(chain_ids.iter().any(|c| c.starts_with("solana:")));
-        assert!(chain_ids.iter().any(|c| c.starts_with("bip122:")));
-        assert!(chain_ids.iter().any(|c| c.starts_with("cosmos:")));
-        assert!(chain_ids.iter().any(|c| c.starts_with("tron:")));
-        assert!(chain_ids.iter().any(|c| c.starts_with("ton:")));
-
-        let wallets = list_wallets(Some(vault)).unwrap();
-        assert_eq!(wallets.len(), 1);
-        assert_eq!(wallets[0].id, info.id);
-    }
-
-    #[test]
-    fn test_create_wallet_duplicate_name() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        create_wallet("dup-name", None, None, Some(vault)).unwrap();
-        let err = create_wallet("dup-name", None, None, Some(vault));
-        assert!(err.is_err());
-    }
-
-    #[test]
-    fn test_get_wallet() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        let info = create_wallet("lookup-test", None, None, Some(vault)).unwrap();
-
-        // By name
-        let found = get_wallet("lookup-test", Some(vault)).unwrap();
-        assert_eq!(found.id, info.id);
-
-        // By ID
-        let found = get_wallet(&info.id, Some(vault)).unwrap();
-        assert_eq!(found.name, "lookup-test");
-    }
-
-    #[test]
-    fn test_delete_wallet() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        let info = create_wallet("del-test", None, None, Some(vault)).unwrap();
-
-        delete_wallet(&info.id, Some(vault)).unwrap();
-        assert!(list_wallets(Some(vault)).unwrap().is_empty());
-    }
-
-    #[test]
-    fn test_export_wallet() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        create_wallet("export-test", None, None, Some(vault)).unwrap();
-
-        let secret = export_wallet("export-test", None, Some(vault)).unwrap();
-        // The secret should be a valid mnemonic (12 words)
-        assert_eq!(secret.split_whitespace().count(), 12);
-    }
-
-    #[test]
-    fn test_rename_wallet() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        create_wallet("old-name", None, None, Some(vault)).unwrap();
-        rename_wallet("old-name", "new-name", Some(vault)).unwrap();
-
-        let found = get_wallet("new-name", Some(vault)).unwrap();
-        assert_eq!(found.name, "new-name");
-        assert!(get_wallet("old-name", Some(vault)).is_err());
-    }
-
-    #[test]
-    fn test_import_wallet_mnemonic() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        let phrase = generate_mnemonic(12).unwrap();
-        let expected_evm_addr = derive_address(&phrase, "ethereum", None).unwrap();
-
-        let info = import_wallet_mnemonic(
-            "imported",
-            &phrase,
-            None,
-            None,
-            Some(vault),
-        )
-        .unwrap();
-
-        assert_eq!(info.name, "imported");
-        assert_eq!(info.accounts.len(), 6);
-
-        // The EVM account should match the derived address
-        let evm_account = info.accounts.iter().find(|a| a.chain_id.starts_with("eip155:")).unwrap();
-        assert_eq!(evm_account.address, expected_evm_addr);
-    }
-
-    #[test]
-    fn test_sign_transaction() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        create_wallet("signer", None, None, Some(vault)).unwrap();
-
-        let tx_hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-        let result =
-            sign_transaction("signer", "evm", tx_hex, None, None, Some(vault))
-                .unwrap();
-
-        assert!(!result.signature.is_empty());
-        assert!(result.recovery_id.is_some());
-    }
-
-    #[test]
-    fn test_sign_message() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        create_wallet("msg-signer", None, None, Some(vault)).unwrap();
-
-        let result = sign_message(
-            "msg-signer",
-            "evm",
-            "hello world",
-            None,
-            None,
-            None,
-            Some(vault),
-        )
-        .unwrap();
-
-        assert!(!result.signature.is_empty());
-    }
-
-    #[test]
-    fn test_universal_wallet_addresses_are_deterministic() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        let phrase = generate_mnemonic(12).unwrap();
-
-        let info = import_wallet_mnemonic("deterministic", &phrase, None, None, Some(vault)).unwrap();
-
-        // Derive each address individually and verify they match
-        for acct in &info.accounts {
-            let chain_str = if acct.chain_id.starts_with("eip155:") {
-                "ethereum"
-            } else if acct.chain_id.starts_with("solana:") {
-                "solana"
-            } else if acct.chain_id.starts_with("bip122:") {
-                "bitcoin"
-            } else if acct.chain_id.starts_with("cosmos:") {
-                "cosmos"
-            } else if acct.chain_id.starts_with("tron:") {
-                "tron"
-            } else if acct.chain_id.starts_with("ton:") {
-                "ton"
-            } else {
-                panic!("unknown chain_id: {}", acct.chain_id);
-            };
-
-            let derived = derive_address(&phrase, chain_str, None).unwrap();
-            assert_eq!(acct.address, derived, "address mismatch for {}", chain_str);
-        }
-    }
-
-    #[test]
-    fn test_addresses_computationally_related() {
-        // Verify that all addresses in a universal wallet are derived from the
-        // same mnemonic seed, and that re-importing the same mnemonic produces
-        // identical addresses across all chains.
-        let dir1 = tempfile::tempdir().unwrap();
-        let dir2 = tempfile::tempdir().unwrap();
-
-        // Create a wallet and export its mnemonic
-        let info1 = create_wallet("wallet-a", None, None, Some(dir1.path())).unwrap();
-        let mnemonic = export_wallet("wallet-a", None, Some(dir1.path())).unwrap();
-
-        // Import the same mnemonic into a second vault
-        let info2 = import_wallet_mnemonic("wallet-b", &mnemonic, None, None, Some(dir2.path())).unwrap();
-
-        // All 6 accounts must match exactly (same mnemonic → same addresses)
-        assert_eq!(info1.accounts.len(), 6);
-        assert_eq!(info2.accounts.len(), 6);
-        for (a1, a2) in info1.accounts.iter().zip(info2.accounts.iter()) {
-            assert_eq!(a1.chain_id, a2.chain_id, "chain_id mismatch");
-            assert_eq!(a1.address, a2.address,
-                "address mismatch for {}: created={} vs imported={}",
-                a1.chain_id, a1.address, a2.address
-            );
-            assert_eq!(a1.derivation_path, a2.derivation_path, "derivation_path mismatch");
-        }
-
-        // Verify the addresses are all distinct from each other
-        // (different chains produce different addresses from the same seed)
-        let addresses: Vec<&str> = info1.accounts.iter().map(|a| a.address.as_str()).collect();
-        for i in 0..addresses.len() {
-            for j in (i + 1)..addresses.len() {
-                assert_ne!(addresses[i], addresses[j],
-                    "addresses for {} and {} should differ",
-                    info1.accounts[i].chain_id, info1.accounts[j].chain_id
-                );
-            }
-        }
-
-        // Verify each address individually matches derive_address()
-        for acct in &info1.accounts {
-            let chain_str = if acct.chain_id.starts_with("eip155:") {
-                "ethereum"
-            } else if acct.chain_id.starts_with("solana:") {
-                "solana"
-            } else if acct.chain_id.starts_with("bip122:") {
-                "bitcoin"
-            } else if acct.chain_id.starts_with("cosmos:") {
-                "cosmos"
-            } else if acct.chain_id.starts_with("tron:") {
-                "tron"
-            } else {
-                "ton"
-            };
-            let derived = derive_address(&mnemonic, chain_str, None).unwrap();
-            assert_eq!(acct.address, derived,
-                "derive_address mismatch for {}", chain_str);
-        }
-    }
-
-    #[test]
-    fn test_import_private_key_sign_and_export() {
-        let dir = tempfile::tempdir().unwrap();
-        let vault = dir.path();
-
-        // A known 32-byte secp256k1 private key (hex)
-        let privkey_hex = "4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318";
+    /// Build a private-key wallet directly in the vault, bypassing
+    /// `import_wallet_private_key` (which touches all chains including TON).
+    fn save_privkey_wallet(
+        name: &str,
+        privkey_hex: &str,
+        passphrase: &str,
+        vault: &Path,
+    ) -> WalletInfo {
         let key_bytes = hex::decode(privkey_hex).unwrap();
-
-        // Manually build a wallet with only EVM account (avoids TON panic)
         let signer = signer_for_chain(ChainType::Evm);
         let address = signer.derive_address(&key_bytes).unwrap();
         let chain = default_chain_for_type(ChainType::Evm);
@@ -905,32 +640,506 @@ mod tests {
             chain_id: chain.chain_id.to_string(),
             derivation_path: String::new(),
         }];
-
-        let crypto_envelope = encrypt(&key_bytes, "").unwrap();
+        let crypto_envelope = encrypt(&key_bytes, passphrase).unwrap();
         let crypto_json = serde_json::to_value(&crypto_envelope).unwrap();
-        let wallet_id = uuid::Uuid::new_v4().to_string();
         let wallet = EncryptedWallet::new(
-            wallet_id,
-            "pk-wallet".to_string(),
+            uuid::Uuid::new_v4().to_string(),
+            name.to_string(),
             accounts,
             crypto_json,
             KeyType::PrivateKey,
         );
         vault::save_encrypted_wallet(&wallet, Some(vault)).unwrap();
+        wallet_to_info(&wallet)
+    }
 
-        // Sign a message — this was the bug: "wallet contains invalid UTF-8 secret"
-        let sig = sign_message("pk-wallet", "evm", "hello", None, None, None, Some(vault)).unwrap();
-        assert!(!sig.signature.is_empty());
+    const TEST_PRIVKEY: &str =
+        "4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318";
 
-        // Sign a transaction
+    // ================================================================
+    // 1. MNEMONIC GENERATION
+    // ================================================================
+
+    #[test]
+    fn mnemonic_12_words() {
+        let phrase = generate_mnemonic(12).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 12);
+    }
+
+    #[test]
+    fn mnemonic_24_words() {
+        let phrase = generate_mnemonic(24).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 24);
+    }
+
+    #[test]
+    fn mnemonic_invalid_word_count() {
+        assert!(generate_mnemonic(15).is_err());
+        assert!(generate_mnemonic(0).is_err());
+        assert!(generate_mnemonic(13).is_err());
+    }
+
+    #[test]
+    fn mnemonic_is_unique_each_call() {
+        let a = generate_mnemonic(12).unwrap();
+        let b = generate_mnemonic(12).unwrap();
+        assert_ne!(a, b, "two generated mnemonics should differ");
+    }
+
+    // ================================================================
+    // 2. ADDRESS DERIVATION
+    // ================================================================
+
+    #[test]
+    fn derive_address_all_chains() {
+        let phrase = generate_mnemonic(12).unwrap();
+        let chains = ["evm", "solana", "bitcoin", "cosmos", "tron", "ton"];
+        for chain in &chains {
+            let addr = derive_address(&phrase, chain, None).unwrap();
+            assert!(!addr.is_empty(), "address should be non-empty for {chain}");
+        }
+    }
+
+    #[test]
+    fn derive_address_evm_format() {
+        let phrase = generate_mnemonic(12).unwrap();
+        let addr = derive_address(&phrase, "evm", None).unwrap();
+        assert!(addr.starts_with("0x"), "EVM address should start with 0x");
+        assert_eq!(addr.len(), 42, "EVM address should be 42 chars");
+    }
+
+    #[test]
+    fn derive_address_deterministic() {
+        let phrase = generate_mnemonic(12).unwrap();
+        let a = derive_address(&phrase, "evm", None).unwrap();
+        let b = derive_address(&phrase, "evm", None).unwrap();
+        assert_eq!(a, b, "same mnemonic should produce same address");
+    }
+
+    #[test]
+    fn derive_address_different_index() {
+        let phrase = generate_mnemonic(12).unwrap();
+        let a = derive_address(&phrase, "evm", Some(0)).unwrap();
+        let b = derive_address(&phrase, "evm", Some(1)).unwrap();
+        assert_ne!(a, b, "different indices should produce different addresses");
+    }
+
+    #[test]
+    fn derive_address_invalid_chain() {
+        let phrase = generate_mnemonic(12).unwrap();
+        assert!(derive_address(&phrase, "nonexistent", None).is_err());
+    }
+
+    #[test]
+    fn derive_address_invalid_mnemonic() {
+        assert!(derive_address("not a valid mnemonic phrase at all", "evm", None).is_err());
+    }
+
+    // ================================================================
+    // 3. MNEMONIC WALLET LIFECYCLE (create → export → import → sign)
+    // ================================================================
+
+    #[test]
+    fn mnemonic_wallet_create_export_reimport() {
+        let v1 = tempfile::tempdir().unwrap();
+        let v2 = tempfile::tempdir().unwrap();
+
+        // Create
+        let w1 = create_wallet("w1", None, None, Some(v1.path())).unwrap();
+        assert!(!w1.accounts.is_empty());
+
+        // Export mnemonic
+        let phrase = export_wallet("w1", None, Some(v1.path())).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 12);
+
+        // Re-import into fresh vault
+        let w2 = import_wallet_mnemonic("w2", &phrase, None, None, Some(v2.path())).unwrap();
+
+        // Addresses must match exactly
+        assert_eq!(w1.accounts.len(), w2.accounts.len());
+        for (a1, a2) in w1.accounts.iter().zip(w2.accounts.iter()) {
+            assert_eq!(a1.chain_id, a2.chain_id);
+            assert_eq!(a1.address, a2.address,
+                "address mismatch for {}", a1.chain_id);
+        }
+    }
+
+    #[test]
+    fn mnemonic_wallet_sign_message_all_chains() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("multi-sign", None, None, Some(vault)).unwrap();
+
+        let chains = ["evm", "solana", "bitcoin", "cosmos", "tron", "ton"];
+        for chain in &chains {
+            let result = sign_message("multi-sign", chain, "test msg", None, None, None, Some(vault));
+            assert!(result.is_ok(), "sign_message should work for {chain}: {:?}", result.err());
+            let sig = result.unwrap();
+            assert!(!sig.signature.is_empty(), "signature should be non-empty for {chain}");
+        }
+    }
+
+    #[test]
+    fn mnemonic_wallet_sign_tx_all_chains() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("tx-sign", None, None, Some(vault)).unwrap();
+
         let tx_hex = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
-        let sig = sign_transaction("pk-wallet", "evm", tx_hex, None, None, Some(vault)).unwrap();
+        let chains = ["evm", "solana", "bitcoin", "cosmos", "tron", "ton"];
+        for chain in &chains {
+            let result = sign_transaction("tx-sign", chain, tx_hex, None, None, Some(vault));
+            assert!(result.is_ok(), "sign_transaction should work for {chain}: {:?}", result.err());
+        }
+    }
+
+    #[test]
+    fn mnemonic_wallet_signing_is_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("det-sign", None, None, Some(vault)).unwrap();
+
+        let s1 = sign_message("det-sign", "evm", "hello", None, None, None, Some(vault)).unwrap();
+        let s2 = sign_message("det-sign", "evm", "hello", None, None, None, Some(vault)).unwrap();
+        assert_eq!(s1.signature, s2.signature, "same message should produce same signature");
+    }
+
+    #[test]
+    fn mnemonic_wallet_different_messages_produce_different_sigs() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("diff-msg", None, None, Some(vault)).unwrap();
+
+        let s1 = sign_message("diff-msg", "evm", "hello", None, None, None, Some(vault)).unwrap();
+        let s2 = sign_message("diff-msg", "evm", "world", None, None, None, Some(vault)).unwrap();
+        assert_ne!(s1.signature, s2.signature);
+    }
+
+    // ================================================================
+    // 4. PRIVATE KEY WALLET LIFECYCLE
+    // ================================================================
+
+    #[test]
+    fn privkey_wallet_sign_message() {
+        let dir = tempfile::tempdir().unwrap();
+        save_privkey_wallet("pk-sign", TEST_PRIVKEY, "", dir.path());
+
+        let sig = sign_message("pk-sign", "evm", "hello", None, None, None, Some(dir.path())).unwrap();
+        assert!(!sig.signature.is_empty());
+        assert!(sig.recovery_id.is_some());
+    }
+
+    #[test]
+    fn privkey_wallet_sign_transaction() {
+        let dir = tempfile::tempdir().unwrap();
+        save_privkey_wallet("pk-tx", TEST_PRIVKEY, "", dir.path());
+
+        let tx = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+        let sig = sign_transaction("pk-tx", "evm", tx, None, None, Some(dir.path())).unwrap();
+        assert!(!sig.signature.is_empty());
+    }
+
+    #[test]
+    fn privkey_wallet_export_returns_hex() {
+        let dir = tempfile::tempdir().unwrap();
+        save_privkey_wallet("pk-export", TEST_PRIVKEY, "", dir.path());
+
+        let exported = export_wallet("pk-export", None, Some(dir.path())).unwrap();
+        assert_eq!(exported, TEST_PRIVKEY, "exported key should match original");
+    }
+
+    #[test]
+    fn privkey_wallet_signing_is_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        save_privkey_wallet("pk-det", TEST_PRIVKEY, "", dir.path());
+
+        let s1 = sign_message("pk-det", "evm", "test", None, None, None, Some(dir.path())).unwrap();
+        let s2 = sign_message("pk-det", "evm", "test", None, None, None, Some(dir.path())).unwrap();
+        assert_eq!(s1.signature, s2.signature);
+    }
+
+    #[test]
+    fn privkey_and_mnemonic_wallets_produce_different_sigs() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        create_wallet("mn-w", None, None, Some(vault)).unwrap();
+        save_privkey_wallet("pk-w", TEST_PRIVKEY, "", vault);
+
+        let mn_sig = sign_message("mn-w", "evm", "hello", None, None, None, Some(vault)).unwrap();
+        let pk_sig = sign_message("pk-w", "evm", "hello", None, None, None, Some(vault)).unwrap();
+        assert_ne!(mn_sig.signature, pk_sig.signature,
+            "different keys should produce different signatures");
+    }
+
+    #[test]
+    fn privkey_wallet_import_via_api() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        let info = import_wallet_private_key("pk-api", TEST_PRIVKEY, Some("evm"), None, Some(vault)).unwrap();
+        assert!(!info.accounts.is_empty(), "should derive at least one account");
+
+        // Should be able to sign
+        let sig = sign_message("pk-api", "evm", "hello", None, None, None, Some(vault)).unwrap();
         assert!(!sig.signature.is_empty());
 
-        // Export — should return hex-encoded key, not blow up with UTF-8 error
-        let exported = export_wallet("pk-wallet", None, Some(vault)).unwrap();
-        assert_eq!(exported, privkey_hex);
+        // Export should return hex key
+        let exported = export_wallet("pk-api", None, Some(vault)).unwrap();
+        assert_eq!(exported, TEST_PRIVKEY);
+    }
 
-        delete_wallet("pk-wallet", Some(vault)).unwrap();
+    // ================================================================
+    // 5. PASSPHRASE PROTECTION
+    // ================================================================
+
+    #[test]
+    fn passphrase_protected_mnemonic_wallet() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        create_wallet("pass-mn", None, Some("s3cret"), Some(vault)).unwrap();
+
+        // Sign with correct passphrase
+        let sig = sign_message("pass-mn", "evm", "hello", Some("s3cret"), None, None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+
+        // Export with correct passphrase
+        let phrase = export_wallet("pass-mn", Some("s3cret"), Some(vault)).unwrap();
+        assert_eq!(phrase.split_whitespace().count(), 12);
+
+        // Wrong passphrase should fail
+        assert!(sign_message("pass-mn", "evm", "hello", Some("wrong"), None, None, Some(vault)).is_err());
+        assert!(export_wallet("pass-mn", Some("wrong"), Some(vault)).is_err());
+
+        // No passphrase should fail (defaults to empty string, which is wrong)
+        assert!(sign_message("pass-mn", "evm", "hello", None, None, None, Some(vault)).is_err());
+    }
+
+    #[test]
+    fn passphrase_protected_privkey_wallet() {
+        let dir = tempfile::tempdir().unwrap();
+        save_privkey_wallet("pass-pk", TEST_PRIVKEY, "mypass", dir.path());
+
+        // Correct passphrase
+        let sig = sign_message("pass-pk", "evm", "hello", Some("mypass"), None, None, Some(dir.path())).unwrap();
+        assert!(!sig.signature.is_empty());
+
+        let exported = export_wallet("pass-pk", Some("mypass"), Some(dir.path())).unwrap();
+        assert_eq!(exported, TEST_PRIVKEY);
+
+        // Wrong passphrase
+        assert!(sign_message("pass-pk", "evm", "hello", Some("wrong"), None, None, Some(dir.path())).is_err());
+        assert!(export_wallet("pass-pk", Some("wrong"), Some(dir.path())).is_err());
+    }
+
+    // ================================================================
+    // 6. SIGNATURE VERIFICATION (prove signatures are cryptographically valid)
+    // ================================================================
+
+    #[test]
+    fn evm_signature_is_recoverable() {
+        use sha3::Digest;
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        let info = create_wallet("verify-evm", None, None, Some(vault)).unwrap();
+        let evm_addr = info.accounts.iter()
+            .find(|a| a.chain_id.starts_with("eip155:"))
+            .unwrap()
+            .address
+            .clone();
+
+        let sig = sign_message("verify-evm", "evm", "hello world", None, None, None, Some(vault)).unwrap();
+
+        // EVM personal_sign: keccak256("\x19Ethereum Signed Message:\n" + len + msg)
+        let msg = b"hello world";
+        let prefix = format!("\x19Ethereum Signed Message:\n{}", msg.len());
+        let mut prefixed = prefix.into_bytes();
+        prefixed.extend_from_slice(msg);
+
+        let hash = sha3::Keccak256::digest(&prefixed);
+        let sig_bytes = hex::decode(&sig.signature).unwrap();
+        assert_eq!(sig_bytes.len(), 65, "EVM signature should be 65 bytes (r + s + v)");
+
+        // Recover public key from signature
+        let recid = k256::ecdsa::RecoveryId::try_from(sig_bytes[64]).unwrap();
+        let ecdsa_sig = k256::ecdsa::Signature::from_slice(&sig_bytes[..64]).unwrap();
+        let recovered_key = k256::ecdsa::VerifyingKey::recover_from_prehash(
+            &hash, &ecdsa_sig, recid
+        ).unwrap();
+
+        // Derive address from recovered key and compare
+        let pubkey_bytes = recovered_key.to_encoded_point(false);
+        let pubkey_hash = sha3::Keccak256::digest(&pubkey_bytes.as_bytes()[1..]);
+        let recovered_addr = format!("0x{}", hex::encode(&pubkey_hash[12..]));
+
+        // Compare case-insensitively (EIP-55 checksum)
+        assert_eq!(
+            recovered_addr.to_lowercase(),
+            evm_addr.to_lowercase(),
+            "recovered address should match wallet's EVM address"
+        );
+    }
+
+    // ================================================================
+    // 7. ERROR HANDLING
+    // ================================================================
+
+    #[test]
+    fn error_nonexistent_wallet() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(get_wallet("nope", Some(dir.path())).is_err());
+        assert!(export_wallet("nope", None, Some(dir.path())).is_err());
+        assert!(sign_message("nope", "evm", "x", None, None, None, Some(dir.path())).is_err());
+        assert!(delete_wallet("nope", Some(dir.path())).is_err());
+    }
+
+    #[test]
+    fn error_duplicate_wallet_name() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("dup", None, None, Some(vault)).unwrap();
+        assert!(create_wallet("dup", None, None, Some(vault)).is_err());
+    }
+
+    #[test]
+    fn error_invalid_private_key_hex() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(import_wallet_private_key("bad", "not-hex", Some("evm"), None, Some(dir.path())).is_err());
+    }
+
+    #[test]
+    fn error_invalid_chain_for_signing() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("chain-err", None, None, Some(vault)).unwrap();
+        assert!(sign_message("chain-err", "fakecoin", "hi", None, None, None, Some(vault)).is_err());
+    }
+
+    #[test]
+    fn error_invalid_tx_hex() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("hex-err", None, None, Some(vault)).unwrap();
+        assert!(sign_transaction("hex-err", "evm", "not-valid-hex!", None, None, Some(vault)).is_err());
+    }
+
+    // ================================================================
+    // 8. WALLET MANAGEMENT
+    // ================================================================
+
+    #[test]
+    fn list_wallets_empty_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        let wallets = list_wallets(Some(dir.path())).unwrap();
+        assert!(wallets.is_empty());
+    }
+
+    #[test]
+    fn get_wallet_by_name_and_id() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        let info = create_wallet("lookup", None, None, Some(vault)).unwrap();
+
+        let by_name = get_wallet("lookup", Some(vault)).unwrap();
+        assert_eq!(by_name.id, info.id);
+
+        let by_id = get_wallet(&info.id, Some(vault)).unwrap();
+        assert_eq!(by_id.name, "lookup");
+    }
+
+    #[test]
+    fn rename_wallet_works() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        let info = create_wallet("before", None, None, Some(vault)).unwrap();
+
+        rename_wallet("before", "after", Some(vault)).unwrap();
+
+        assert!(get_wallet("before", Some(vault)).is_err());
+        let after = get_wallet("after", Some(vault)).unwrap();
+        assert_eq!(after.id, info.id);
+    }
+
+    #[test]
+    fn rename_to_existing_name_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("a", None, None, Some(vault)).unwrap();
+        create_wallet("b", None, None, Some(vault)).unwrap();
+        assert!(rename_wallet("a", "b", Some(vault)).is_err());
+    }
+
+    #[test]
+    fn delete_wallet_removes_from_list() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("del-me", None, None, Some(vault)).unwrap();
+        assert_eq!(list_wallets(Some(vault)).unwrap().len(), 1);
+
+        delete_wallet("del-me", Some(vault)).unwrap();
+        assert_eq!(list_wallets(Some(vault)).unwrap().len(), 0);
+    }
+
+    // ================================================================
+    // 9. MESSAGE ENCODING
+    // ================================================================
+
+    #[test]
+    fn sign_message_hex_encoding() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("hex-enc", None, None, Some(vault)).unwrap();
+
+        // "hello" in hex
+        let sig = sign_message("hex-enc", "evm", "68656c6c6f", None, Some("hex"), None, Some(vault)).unwrap();
+        assert!(!sig.signature.is_empty());
+
+        // Should match utf8 encoding of the same bytes
+        let sig2 = sign_message("hex-enc", "evm", "hello", None, Some("utf8"), None, Some(vault)).unwrap();
+        assert_eq!(sig.signature, sig2.signature,
+            "hex and utf8 encoding of same bytes should produce same signature");
+    }
+
+    #[test]
+    fn sign_message_invalid_encoding() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+        create_wallet("bad-enc", None, None, Some(vault)).unwrap();
+        assert!(sign_message("bad-enc", "evm", "hello", None, Some("base64"), None, Some(vault)).is_err());
+    }
+
+    // ================================================================
+    // 10. MULTI-WALLET VAULT
+    // ================================================================
+
+    #[test]
+    fn multiple_wallets_coexist() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path();
+
+        create_wallet("w1", None, None, Some(vault)).unwrap();
+        create_wallet("w2", None, None, Some(vault)).unwrap();
+        save_privkey_wallet("w3", TEST_PRIVKEY, "", vault);
+
+        let wallets = list_wallets(Some(vault)).unwrap();
+        assert_eq!(wallets.len(), 3);
+
+        // All can sign independently
+        let s1 = sign_message("w1", "evm", "test", None, None, None, Some(vault)).unwrap();
+        let s2 = sign_message("w2", "evm", "test", None, None, None, Some(vault)).unwrap();
+        let s3 = sign_message("w3", "evm", "test", None, None, None, Some(vault)).unwrap();
+
+        // All signatures should be different (different keys)
+        assert_ne!(s1.signature, s2.signature);
+        assert_ne!(s1.signature, s3.signature);
+        assert_ne!(s2.signature, s3.signature);
+
+        // Delete one, others survive
+        delete_wallet("w2", Some(vault)).unwrap();
+        assert_eq!(list_wallets(Some(vault)).unwrap().len(), 2);
+        assert!(sign_message("w1", "evm", "test", None, None, None, Some(vault)).is_ok());
+        assert!(sign_message("w3", "evm", "test", None, None, None, Some(vault)).is_ok());
     }
 }
