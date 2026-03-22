@@ -87,20 +87,29 @@ pub fn run(
     Ok(())
 }
 
-/// `ows pay discover [--query <search>]`
-pub fn discover(query: Option<&str>) -> Result<(), CliError> {
+/// `ows pay discover [--query <search>] [--limit N] [--offset N]`
+pub fn discover(
+    query: Option<&str>,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<(), CliError> {
     let rt =
         tokio::runtime::Runtime::new().map_err(|e| CliError::InvalidArgs(format!("tokio: {e}")))?;
 
-    let services = rt.block_on(ows_pay::discover(query))?;
+    let result = rt.block_on(ows_pay::discover(query, limit, offset))?;
 
-    if services.is_empty() {
+    if result.services.is_empty() {
         eprintln!("No services found.");
         return Ok(());
     }
 
-    eprintln!("{} services:\n", services.len());
-    for svc in &services {
+    eprintln!(
+        "Showing {}-{} of {} services:\n",
+        result.offset + 1,
+        result.offset + result.services.len() as u64,
+        result.total,
+    );
+    for svc in &result.services {
         println!(
             "  {:>8}  {:<8}  {}",
             svc.price, svc.network, svc.description

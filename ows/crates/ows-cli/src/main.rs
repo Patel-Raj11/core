@@ -259,6 +259,12 @@ enum PayCommands {
         /// Search query (filters by URL and description)
         #[arg(long)]
         query: Option<String>,
+        /// Max results per page (default 100)
+        #[arg(long)]
+        limit: Option<u64>,
+        /// Offset into results for pagination
+        #[arg(long)]
+        offset: Option<u64>,
     },
 }
 
@@ -406,7 +412,11 @@ fn run(cli: Cli) -> Result<(), CliError> {
                 body,
                 no_passphrase,
             } => commands::pay::run(&url, &wallet, &method, body.as_deref(), no_passphrase),
-            PayCommands::Discover { query } => commands::pay::discover(query.as_deref()),
+            PayCommands::Discover {
+                query,
+                limit,
+                offset,
+            } => commands::pay::discover(query.as_deref(), limit, offset),
         },
         Commands::Mnemonic { subcommand } => match subcommand {
             MnemonicCommands::Generate { words } => commands::generate::run(words),

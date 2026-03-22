@@ -61,6 +61,19 @@ pub struct Service {
     pub tags: Vec<String>,
 }
 
+/// Result of a `discover()` call, including pagination info.
+#[derive(Debug, Clone)]
+pub struct DiscoverResult {
+    /// Discovered services on this page.
+    pub services: Vec<Service>,
+    /// Total number of services in the directory.
+    pub total: u64,
+    /// Limit used for this page.
+    pub limit: u64,
+    /// Offset used for this page.
+    pub offset: u64,
+}
+
 // ===========================================================================
 // x402 wire types (internal, used by x402 module)
 // ===========================================================================

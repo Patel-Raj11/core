@@ -18,7 +18,7 @@ pub mod wallet;
 mod x402;
 
 pub use error::{PayError, PayErrorCode};
-pub use types::{PayResult, PaymentInfo, Protocol, Service};
+pub use types::{DiscoverResult, PayResult, PaymentInfo, Protocol, Service};
 pub use wallet::{EvmAccount, TypedDataSignature, WalletAccess};
 
 /// Make an HTTP request with automatic payment handling.
@@ -58,7 +58,14 @@ pub async fn pay(
     x402::handle_x402(wallet, url, method, body, &headers, &body_402).await
 }
 
-/// Discover payable services across all protocols.
-pub async fn discover(query: Option<&str>) -> Result<Vec<Service>, PayError> {
-    discovery::discover_all(query).await
+/// Discover payable services.
+///
+/// Supports pagination via `limit` and `offset`. Returns services and
+/// pagination metadata so callers can page through the full directory.
+pub async fn discover(
+    query: Option<&str>,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<DiscoverResult, PayError> {
+    discovery::discover_all(query, limit, offset).await
 }

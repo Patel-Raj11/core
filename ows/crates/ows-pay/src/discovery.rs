@@ -1,5 +1,5 @@
 use crate::error::{PayError, PayErrorCode};
-use crate::types::{DiscoveredService, DiscoveryResponse, Protocol, Service};
+use crate::types::{DiscoverResult, DiscoveryResponse, Protocol, Service};
 
 const CDP_DISCOVERY_URL: &str = "https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources";
 
@@ -14,19 +14,24 @@ const TESTNETS: &[&str] = &[
 // Unified discovery (public API)
 // ===========================================================================
 
-/// Discover payable services across all protocols.
+/// Discover payable services.
 ///
-/// Fetches service directories, filters testnets, and returns a unified list.
-pub async fn discover_all(query: Option<&str>) -> Result<Vec<Service>, PayError> {
-    let x402_result = match query {
-        Some(q) => search_x402(q).await,
-        None => fetch_x402(Some(100), None).await,
-    };
+/// Fetches the x402 directory with the given pagination parameters,
+/// filters testnets, and returns services with pagination metadata.
+pub async fn discover_all(
+    query: Option<&str>,
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Result<DiscoverResult, PayError> {
+    let limit = limit.unwrap_or(100);
+    let offset = offset.unwrap_or(0);
+
+    let resp = fetch_x402(limit, offset).await?;
+    let total = resp.total;
 
     let mut services = Vec::new();
 
-    // Convert x402 services (filter testnets).
-    for svc in x402_result.unwrap_or_default() {
+    for svc in resp.items {
         let accept = match svc.accepts.first() {
             Some(a) => a,
             None => continue,
@@ -35,6 +40,25 @@ pub async fn discover_all(query: Option<&str>) -> Result<Vec<Service>, PayError>
         let is_testnet = TESTNETS.iter().any(|t| accept.network.contains(t));
         if is_testnet {
             continue;
+        }
+
+        if let Some(q) = query {
+            let q = q.to_lowercase();
+            let url_match = svc.resource.to_lowercase().contains(&q);
+            let accepts_desc = accept
+                .description
+                .as_ref()
+                .map(|d| d.to_lowercase().contains(&q))
+                .unwrap_or(false);
+            let meta_desc = svc
+                .metadata
+                .as_ref()
+                .and_then(|m| m.description.as_ref())
+                .map(|d| d.to_lowercase().contains(&q))
+                .unwrap_or(false);
+            if !url_match && !accepts_desc && !meta_desc {
+                continue;
+            }
         }
 
         let desc = accept
@@ -54,24 +78,28 @@ pub async fn discover_all(query: Option<&str>) -> Result<Vec<Service>, PayError>
         });
     }
 
-    Ok(services)
+    Ok(DiscoverResult {
+        services,
+        total,
+        limit,
+        offset,
+    })
 }
 
 // ===========================================================================
 // x402 fetching (internal)
 // ===========================================================================
 
-pub(crate) async fn fetch_x402(
-    limit: Option<u64>,
-    offset: Option<u64>,
-) -> Result<Vec<DiscoveredService>, PayError> {
+struct FetchResult {
+    items: Vec<crate::types::DiscoveredService>,
+    total: u64,
+}
+
+async fn fetch_x402(limit: u64, offset: u64) -> Result<FetchResult, PayError> {
     let client = reqwest::Client::new();
     let resp = client
         .get(CDP_DISCOVERY_URL)
-        .query(&[
-            ("limit", limit.unwrap_or(100).to_string()),
-            ("offset", offset.unwrap_or(0).to_string()),
-        ])
+        .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
         .send()
         .await?;
 
@@ -91,32 +119,12 @@ pub(crate) async fn fetch_x402(
         )
     })?;
 
-    Ok(body.items)
-}
+    let total = body.pagination.map(|p| p.total).unwrap_or(0);
 
-async fn search_x402(query: &str) -> Result<Vec<DiscoveredService>, PayError> {
-    let all = fetch_x402(Some(100), None).await?;
-    let q = query.to_lowercase();
-
-    Ok(all
-        .into_iter()
-        .filter(|s| {
-            let url_match = s.resource.to_lowercase().contains(&q);
-            let accepts_desc = s
-                .accepts
-                .first()
-                .and_then(|a| a.description.as_ref())
-                .map(|d| d.to_lowercase().contains(&q))
-                .unwrap_or(false);
-            let meta_desc = s
-                .metadata
-                .as_ref()
-                .and_then(|m| m.description.as_ref())
-                .map(|d| d.to_lowercase().contains(&q))
-                .unwrap_or(false);
-            url_match || accepts_desc || meta_desc
-        })
-        .collect())
+    Ok(FetchResult {
+        items: body.items,
+        total,
+    })
 }
 
 // ===========================================================================
