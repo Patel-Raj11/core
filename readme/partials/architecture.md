@@ -13,8 +13,8 @@ Agent / CLI / App
 │  └───────┬────────┘  │     5. Key wiped from memory
 │  ┌───────▼────────┐  │     6. Signature returned
 │  │  Signing Core   │  │
-│  │   (in-process)  │  │     The caller NEVER sees
-│  └───────┬────────┘  │     the private key.
+│  │   (in-process)  │  │     The OWS API never returns
+│  └───────┬────────┘  │     raw private keys.
 │  ┌───────▼────────┐  │
 │  │  Wallet Vault   │  │
 │  │ ~/.ows/wallets/ │  │

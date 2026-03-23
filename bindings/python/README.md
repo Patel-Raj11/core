@@ -2,16 +2,16 @@
 
 # open-wallet-standard
 
-Secure signing and wallet management for every chain. One vault, one interface — keys never leave your machine.
+Local, policy-gated signing and wallet management for every chain.
 
 [![PyPI](https://img.shields.io/pypi/v/open-wallet-standard)](https://pypi.org/project/open-wallet-standard/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/open-wallet-standard/core/blob/main/LICENSE)
 
 ## Why OWS
 
-- **Zero key exposure.** Private keys are encrypted at rest, decrypted only after policy checks pass, then immediately wiped from memory. Agents authenticate with scoped API tokens and never see raw key material.
+- **Local key custody.** Private keys stay encrypted at rest and are decrypted only inside the OWS signing path after the relevant checks pass. Current implementations harden in-process memory handling and wipe key material after use.
 - **Every chain, one interface.** EVM, Solana, Sui, Bitcoin, Cosmos, Tron, TON, Spark, Filecoin — all first-class. CAIP-2/CAIP-10 addressing abstracts away chain-specific details.
-- **Policy before signing.** A pre-signing policy engine gates agent (API key) operations — chain allowlists, expiry, and optional custom executables — before any key is touched.
+- **Policy before signing.** A pre-signing policy engine gates agent (API key) operations before decryption — chain allowlists, expiry, and optional custom executables.
 - **Built for agents.** Native SDK and CLI today. A wallet created by one tool works in every other.
 
 ## Install
@@ -89,8 +89,8 @@ Agent / CLI / App
 │  └───────┬────────┘  │     5. Key wiped from memory
 │  ┌───────▼────────┐  │     6. Signature returned
 │  │  Signing Core   │  │
-│  │   (in-process)  │  │     The caller NEVER sees
-│  └───────┬────────┘  │     the private key.
+│  │   (in-process)  │  │     The OWS API never returns
+│  └───────┬────────┘  │     raw private keys.
 │  ┌───────▼────────┐  │
 │  │  Wallet Vault   │  │
 │  │ ~/.ows/wallets/ │  │

@@ -29,7 +29,7 @@ ows wallet create --name "my-wallet"
 | Flag | Description |
 |------|-------------|
 | `--name <NAME>` | Wallet name (required) |
-| `--passphrase <PASS>` | Encryption passphrase (prompted if omitted) |
+| `--show-mnemonic` | Display the generated mnemonic once at creation time |
 | `--words <12\|24>` | Mnemonic word count (default: 12) |
 
 Output:
@@ -58,10 +58,10 @@ echo "4c0883a691..." | ows wallet import --name "from-evm" --private-key
 # Import an Ed25519 key (e.g. from Solana)
 echo "9d61b19d..." | ows wallet import --name "from-sol" --private-key --chain solana
 
-# Import explicit keys for both curves (no stdin needed)
-ows wallet import --name "both" \
-  --secp256k1-key "4c0883a691..." \
-  --ed25519-key "9d61b19d..."
+# Import explicit keys for both curves via environment variables
+OWS_SECP256K1_KEY="4c0883a691..." \
+OWS_ED25519_KEY="9d61b19d..." \
+  ows wallet import --name "both"
 ```
 
 | Flag | Description |
@@ -71,10 +71,10 @@ ows wallet import --name "both" \
 | `--private-key` | Import a raw private key |
 | `--chain <CHAIN>` | Source chain for private key import (determines curve, default: evm) |
 | `--index <N>` | Account index for HD derivation (mnemonic only, default: 0) |
-| `--secp256k1-key <HEX>` | Explicit secp256k1 private key. When combined with `--ed25519-key`, `--private-key` is not required. |
-| `--ed25519-key <HEX>` | Explicit Ed25519 private key. When combined with `--secp256k1-key`, `--private-key` is not required. |
+| `OWS_SECP256K1_KEY` | Explicit secp256k1 private key via environment variable |
+| `OWS_ED25519_KEY` | Explicit Ed25519 private key via environment variable |
 
-Private key imports generate all 8 chain accounts: the provided key is used for its curve's chains, and a random key is generated for the other curve. Use `--secp256k1-key` and `--ed25519-key` together to supply both keys explicitly.
+Private key imports generate all 8 chain accounts: the provided key is used for its curve's chains, and a random key is generated for the other curve. Use `OWS_SECP256K1_KEY` and `OWS_ED25519_KEY` together to supply both keys explicitly.
 
 ### `ows wallet export`
 
@@ -105,6 +105,142 @@ Show vault path and supported chains.
 ows wallet info
 ```
 
+## Policy Commands
+
+### `ows policy create`
+
+Register a policy from a JSON file.
+
+```bash
+ows policy create --file base-policy.json
+```
+
+Policy JSON format:
+
+```json
+{
+  "id": "base-only",
+  "name": "Base and Sepolia until year end",
+  "version": 1,
+  "created_at": "2026-03-22T00:00:00Z",
+  "rules": [
+    { "type": "allowed_chains", "chain_ids": ["eip155:8453", "eip155:84532"] },
+    { "type": "expires_at", "timestamp": "2026-12-31T00:00:00Z" }
+  ],
+  "action": "deny"
+}
+```
+
+Rules are AND-combined — all must pass. Supported declarative rule types:
+
+| Rule | Description |
+|------|-------------|
+| `allowed_chains` | Deny if chain is not in the list |
+| `expires_at` | Deny if current time is past the timestamp |
+
+Policies can also specify an `executable` field for custom validation — receives PolicyContext on stdin, writes `{"allow": true}` or `{"allow": false, "reason": "..."}` to stdout.
+
+### `ows policy list`
+
+```bash
+ows policy list
+```
+
+### `ows policy show`
+
+```bash
+ows policy show --id base-only
+```
+
+### `ows policy delete`
+
+```bash
+ows policy delete --id base-only --confirm
+```
+
+## Key Commands
+
+### `ows key create`
+
+Create an API key for agent access to one or more wallets. The owner's passphrase is required to re-encrypt the mnemonic under the token.
+
+```bash
+ows key create --name "claude-agent" \
+  --wallet my-wallet \
+  --policy base-only \
+  --policy agent-expiry
+```
+
+| Flag | Description |
+|------|-------------|
+| `--name <NAME>` | Key name (required) |
+| `--wallet <NAME>` | Wallet name or ID (repeatable) |
+| `--policy <ID>` | Policy ID to attach (repeatable) |
+| `--expires-at <TS>` | Optional expiry (ISO-8601) |
+
+Output includes the raw token (`ows_key_...`) — shown once. The agent uses this token in place of the passphrase.
+
+### `ows key list`
+
+```bash
+ows key list
+```
+
+Lists all keys with ID, name, wallets, policies, and creation time. Tokens are never displayed.
+
+### `ows key revoke`
+
+```bash
+ows key revoke --id <key-id> --confirm
+```
+
+Deletes the key file. The encrypted mnemonic copy is gone — the token becomes useless.
+
+## End-to-End Example: Agent Access
+
+```bash
+# Create a wallet
+ows wallet create --name agent-treasury
+
+# Define a policy: Base chain only, expires at end of year
+cat > policy.json << 'EOF'
+{
+  "id": "agent-limits",
+  "name": "Agent Safety Limits",
+  "version": 1,
+  "created_at": "2026-03-22T00:00:00Z",
+  "rules": [
+    { "type": "allowed_chains", "chain_ids": ["eip155:8453"] },
+    { "type": "expires_at", "timestamp": "2026-12-31T23:59:59Z" }
+  ],
+  "action": "deny"
+}
+EOF
+ows policy create --file policy.json
+
+# Create an API key with the policy attached
+ows key create --name "claude" --wallet agent-treasury --policy agent-limits
+# Output: ows_key_a1b2c3d4... (save this)
+
+# Agent signs on Base — policy allows it
+OWS_PASSPHRASE="ows_key_a1b2c3d4..." \
+  ows sign tx --wallet agent-treasury --chain base --tx 0x02f8...
+
+# Agent tries Ethereum mainnet — policy denies it
+OWS_PASSPHRASE="ows_key_a1b2c3d4..." \
+  ows sign tx --wallet agent-treasury --chain ethereum --tx 0x02f8...
+# error: policy denied: chain eip155:1 not in allowlist
+
+# Owner signs with the wallet passphrase — no policy enforcement
+OWS_PASSPHRASE="your-wallet-passphrase" \
+  ows sign tx --wallet agent-treasury --chain ethereum --tx 0x02f8...
+# Owner mode bypasses all policies
+
+# Revoke the agent's access
+ows key revoke --id <key-id> --confirm
+# Token is now useless
+```
+
 ## Signing Commands
 
 ### `ows sign message`
@@ -118,10 +254,11 @@ ows sign message --wallet "my-wallet" --chain evm --message "hello world"
 | Flag | Description |
 |------|-------------|
 | `--wallet <NAME>` | Wallet name or ID |
-| `--chain <CHAIN>` | Chain family: `evm`, `solana`, `sui`, `bitcoin`, `cosmos`, `tron` |
+| `--chain <CHAIN>` | Chain family or supported alias / CAIP-2 ID |
 | `--message <MSG>` | Message to sign |
-| `--passphrase <PASS>` | Decryption passphrase |
 | `--encoding <ENC>` | Message encoding: `utf8` (default) or `hex` |
+| `--typed-data <JSON>` | EIP-712 typed data JSON (EVM only) |
+| `--json` | Output structured JSON |
 
 ### `ows sign tx`
 
@@ -136,7 +273,9 @@ ows sign tx --wallet "my-wallet" --chain evm --tx "02f8..."
 | `--wallet <NAME>` | Wallet name or ID |
 | `--chain <CHAIN>` | Chain family |
 | `--tx <HEX>` | Hex-encoded transaction bytes |
-| `--passphrase <PASS>` | Decryption passphrase |
+| `--json` | Output structured JSON |
+
+Passphrases and API tokens are supplied via `OWS_PASSPHRASE` or an interactive prompt, not a dedicated `--passphrase` flag.
 
 ## Mnemonic Commands
 
@@ -244,9 +383,13 @@ ows uninstall --purge  # also remove ~/.ows (all wallet data)
 ```
 ~/.ows/
   bin/
-    ows                  # CLI binary
+    ows                     # CLI binary
   wallets/
-    <uuid>/
-      wallet.json        # Encrypted keystore (Keystore v3)
-      meta.json          # Name, chain, creation time
+    <uuid>.json             # Encrypted wallet (AES-256-GCM + scrypt)
+  policies/
+    <id>.json               # Policy definitions (not secret)
+  keys/
+    <uuid>.json             # API key files (0600 permissions)
+  logs/
+    audit.jsonl             # Audit log
 ```

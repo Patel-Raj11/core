@@ -1,20 +1,6 @@
-# 07 - Supported Chains
+# Supported Chains
 
 > Canonical reference for all chains supported by OWS: identifiers, derivation paths, address formats, RPC endpoints, and asset identification.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| CAIP-2 chain ID parsing (`namespace:reference`) | Done | `ows-core/src/caip.rs` |
-| CAIP-10 account IDs (`chain_id:address`) | Done | Stored in wallet `account_id` field |
-| Registered chain families (9 families, 15 networks) | Done | `ows-core/src/chain.rs` |
-| Per-chain signers (EVM, Solana, Sui, Bitcoin, Cosmos, Tron, TON, Spark, Filecoin) | Done | `ows-signer/src/chains/` |
-| HD derivation: BIP-32 (secp256k1) + SLIP-10 (ed25519) | Done | `ows-signer/src/hd.rs` |
-| Default RPC endpoints | Done | `ows-core/src/config.rs` |
-| User RPC overrides via config | Done | Merge semantics |
-| Shorthand aliases (e.g. `ethereum` → `eip155:1`) | Done | `parse_chain()` in CLI |
-| Asset identification (`chain_id:contract` / `native`) | Not started | No asset ID scheme |
 
 ## Identifier Types
 

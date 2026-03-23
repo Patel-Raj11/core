@@ -1,47 +1,6 @@
-# 03 - Policy Engine
+# Policy Engine
 
 > How transaction policies are defined, evaluated, and enforced before any key material is touched.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Two-tier access model (owner vs agent) | Done | Passphrase vs `ows_key_...` token (`ows-lib` key path) |
-| API key CLI (`ows key create` / `list` / `revoke`) | Done | |
-| API key file format + storage (`~/.ows/keys/`) | Done | Mnemonic re-encrypted under HKDF(token) |
-| HKDF-SHA256 key derivation for API tokens | Done | |
-| Policy file format + storage (`~/.ows/policies/`) | Done | |
-| Declarative policy rules (`allowed_chains`, `expires_at`) | Done | |
-| Custom executable policy protocol (stdin/stdout) | Done | 5s timeout + kill on timeout |
-| PolicyContext / PolicyResult | Done | `ows-core/src/policy.rs` |
-| Policy attachment to API keys | Done | |
-| Default-deny on executable failures | Done | |
-| AND semantics (all policies must allow) | Done | |
-| `ows policy` CLI (`create`, `list`, `show`, `delete`) | Done | |
-| `PolicyAction::warn` | Not started | JSON policies only support `deny` today |
-| Rich audit entries (policy_id / API key on deny) | Partial | See `audit.jsonl` format in `docs/01-storage-format.md` |
-| Spending state in `PolicyContext` | Partial | Fields exist; declarative daily caps were removed — use an `executable` for spend tracking |
-
-**Implemented in** `ows-cli`, `ows-lib` (`policy_engine`, `policy_store`, `key_store`, `key_ops`). See [policy-engine-implementation.md](policy-engine-implementation.md) for design history. Some **spec** items (warn action, richer audit) are still open.
-
-## Design Decision
-
-**The credential determines the access tier.** The wallet owner authenticates with a passphrase and has full, unrestricted access — no policies are evaluated. Agents authenticate with API tokens (`ows_key_...`) whose attached policies are evaluated before any key material is touched. Policies are attached to API keys, not wallets. Only transactions that pass all of a key's policies are signed.
-
-### Why Pre-Signing Policy Enforcement
-
-We studied three enforcement models:
-
-| Model | Where Enforced | Used By | Trade-offs |
-|---|---|---|---|
-| Application-layer | In the calling app | Most agent frameworks | Bypassable; the app can ignore its own rules |
-| Smart contract | On-chain | Crossmint (ERC-4337), Lit Protocol | Strong but chain-specific; gas cost for policy checks |
-| **Pre-signing gate** | In the wallet process | Privy, Turnkey | Universal across chains; not bypassable without vault access |
-
-OWS uses pre-signing enforcement because:
-1. It works identically for all chains (no smart contract deployment needed)
-2. It prevents key material from being accessed for unauthorized transactions
-3. It complements on-chain enforcement (use both for defense in depth)
 
 ## Access Model
 
@@ -68,17 +27,13 @@ If the owner wants policy-constrained access for themselves, they create an API 
 
 ## API Key Cryptography
 
-### The problem
-
-Agents need to sign autonomously — no human in the loop. The wallet's mnemonic is encrypted under the owner's passphrase. How does an agent decrypt it without the passphrase?
-
 ### Token-as-capability
 
 When the owner creates an API key, OWS decrypts the wallet mnemonic using the owner's passphrase and **re-encrypts it under a key derived from the API token**. The encrypted copy is stored in the API key file. The agent presents the token with each signing request; the token serves as both authentication and decryption capability.
 
 ### Key derivation (HKDF-SHA256)
 
-API tokens are 256-bit random values (`ows_key_<64 hex chars>`). Since they are already high-entropy, we use HKDF-SHA256 instead of scrypt:
+API tokens are 256-bit random values (`ows_key_<64 hex chars>`). HKDF-SHA256 is used to derive the encryption key:
 
 ```
 token = ows_key_<random 256 bits, hex-encoded>
@@ -86,8 +41,6 @@ salt  = random 32 bytes (stored in CryptoEnvelope)
 prk   = HKDF-Extract(salt, token)
 key   = HKDF-Expand(prk, "ows-api-key-v1", 32)  →  AES-256-GCM key
 ```
-
-Scrypt exists to make brute-force expensive for low-entropy passphrases. API tokens have 256 bits of entropy — brute force is already infeasible. HKDF derives the key in microseconds vs scrypt's ~500ms, eliminating latency in the agent signing path.
 
 The `CryptoEnvelope` struct is reused with a new KDF identifier:
 
@@ -186,7 +139,7 @@ echo '<PolicyContext JSON>' | /path/to/policy-executable
 - The executable receives the full `PolicyContext` as a single JSON object on stdin
 - The executable MUST write a single `PolicyResult` JSON object to stdout
 - A non-zero exit code is treated as a denial
-- Stderr is captured by the evaluation path and may be surfaced in denial details; current implementations do not emit dedicated audit entries for every policy event
+- Stderr is captured by the evaluation path and may be surfaced in denial details
 
 ### Evaluation order within a policy
 
@@ -266,8 +219,6 @@ The base JSON object available to policy evaluation:
 
 For executable policies, the engine injects `policy_config` into the JSON payload when the policy file includes a `config` object.
 
-The current `spending` payload includes `daily_total` and `date`. It does not currently expose remaining budget or a richer wallet descriptor.
-
 ## PolicyResult
 
 ```json
@@ -299,8 +250,6 @@ For custom executable policies only (declarative rules cannot fail in these ways
 The default-deny stance ensures that policy failures are never silently bypassed.
 
 ## Policy Actions
-
-Current implementations support a single action:
 
 | Action | Behavior |
 |---|---|
@@ -366,13 +315,6 @@ The corresponding policy file:
 }
 ```
 
-This policy uses declarative rules as a pre-filter (only Base) and the executable for simulation. If the chain check fails, the subprocess is never spawned.
-
 ## References
 
-- [Privy Policy Engine](https://privy.io/blog/turning-wallets-programmable-with-privy-policy-engine)
-- [Crossmint Onchain Policy Enforcement](https://blog.crossmint.com/ai-agent-wallet-architecture/)
 - [ERC-4337 Session Keys](https://eips.ethereum.org/EIPS/eip-4337)
-- [Lit Protocol / Vincent Policy Framework](https://spark.litprotocol.com/meet-vincent-an-agent-wallet-and-app-store-framework-for-user-owned-automation/)
-- [Turnkey Granular Policies](https://docs.turnkey.com)
-- [Coinbase Agentic Wallet Guardrails](https://www.coinbase.com/developer-platform/discover/launches/agentic-wallets)

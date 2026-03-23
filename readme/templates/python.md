@@ -2,7 +2,7 @@
 
 # open-wallet-standard
 
-Secure signing and wallet management for every chain. One vault, one interface — keys never leave your machine.
+Local, policy-gated signing and wallet management for every chain.
 
 [![PyPI](https://img.shields.io/pypi/v/open-wallet-standard)](https://pypi.org/project/open-wallet-standard/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/open-wallet-standard/core/blob/main/LICENSE)

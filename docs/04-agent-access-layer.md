@@ -1,36 +1,6 @@
-# 04 - Agent Access Layer
+# Agent Access Layer
 
 > How AI agents, CLI tools, and applications access OWS wallets through native language bindings.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| `generate_mnemonic(words?)` | Done | 12 or 24 words |
-| `derive_address(mnemonic, chain, index?)` | Done | |
-| `create_wallet(name, passphrase?, words?, ...)` | Done | |
-| `import_wallet_mnemonic(...)` | Done | |
-| `import_wallet_private_key(...)` | Done | |
-| `list_wallets(vault_path?)` | Done | |
-| `get_wallet(name_or_id, vault_path?)` | Done | |
-| `delete_wallet(name_or_id, vault_path?)` | Done | |
-| `export_wallet(name_or_id, passphrase, ...)` | Done | |
-| `rename_wallet(name_or_id, new_name, ...)` | Done | |
-| `sign_transaction(...)` | Done | |
-| `sign_message(...)` | Done | |
-| `sign_and_send(...)` | Done | |
-| Node.js NAPI bindings | Done | `bindings/node/src/lib.rs` |
-| Python PyO3 bindings | Done | `bindings/python/src/lib.rs` |
-| Token-based signing (credential = passphrase or `ows_key_...` token) | Done | CLI and bindings route through `ows-lib`; token-based typed-data signing is the remaining exception |
-| Policy evaluation on agent requests | Done | Enforced in `ows-lib` before API-token decryption |
-| API key management (`create_api_key`, `list_api_keys`, `revoke_api_key`) | Done | Available in CLI and Node/Python bindings |
-| Policy management (`create_policy`, `list_policies`, `get_policy`, `delete_policy`) | Done | Available in CLI and Node/Python bindings |
-| MCP server | Not started | |
-| Audit logging from bindings (not just CLI) | Not started | Only CLI logs to audit |
-
-## Design Decision
-
-**OWS exposes wallet operations through native language bindings backed by the core Rust implementation. Bindings call directly into the `ows-lib` crate via FFI — no HTTP server or subprocess is required. They are compiled native modules that run in-process.**
 
 ## Native Language Bindings
 
@@ -123,8 +93,6 @@ The `passphrase` parameter in signing functions accepts either a wallet passphra
 
 This means existing signing function signatures are unchanged for transaction and message signing — agents pass a token where the passphrase goes.
 
-> **Current limitation:** EIP-712 typed-data signing via API token is not yet supported. Owner-mode typed-data signing works; token-based typed-data signing currently returns an error.
-
 > **Note:** Because the bindings run in-process, key material is decrypted within the application's address space. For use cases where key isolation is critical, consider running OWS in a separate subprocess.
 
 ### Management functions
@@ -165,7 +133,3 @@ Agent: "I need to send 0.01 ETH to 0x4B08... on Base"
 ```
 
 At no point does the agent see the private key. The API token determines which wallets the agent can access, and the policies attached to the token constrain what operations are permitted.
-
-## References
-
-- [Privy Server Wallet REST API](https://docs.privy.io/guide/server-wallets/create)

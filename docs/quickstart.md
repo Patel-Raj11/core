@@ -50,7 +50,7 @@ ows fund balance --wallet agent-treasury --chain base
 
 ## Pay for services
 
-OWS handles the full [MPP](https://mpp.dev) (Machine Payments Protocol) flow automatically. When a server returns `402 Payment Required`, the CLI signs the payment credential and retries — no extra code needed.
+OWS handles the full [x402](https://www.x402.org/) payment flow automatically. When a server returns `402 Payment Required`, the CLI signs the payment credential and retries — no extra code needed.
 
 ```bash
 # GET request — payment handled automatically

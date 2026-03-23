@@ -23,6 +23,10 @@ bindings/node/artifacts/
 
 # Website
 website/docs/md/
+website-docs/md/
+website-docs/llms-full.txt
+website-docs/SKILL.md
+website-docs/install.sh
 
 # IDE
 .idea/

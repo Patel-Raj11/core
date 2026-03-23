@@ -2,7 +2,7 @@
 
 # @open-wallet-standard/core
 
-Secure signing and wallet management for every chain. One vault, one interface — keys never leave your machine.
+Local, policy-gated signing and wallet management for every chain.
 
 [![npm](https://img.shields.io/npm/v/@open-wallet-standard/core)](https://www.npmjs.com/package/@open-wallet-standard/core)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/open-wallet-standard/core/blob/main/LICENSE)

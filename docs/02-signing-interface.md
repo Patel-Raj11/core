@@ -1,49 +1,6 @@
-# 02 - Signing Interface
+# Signing Interface
 
 > The core operations exposed by an OWS implementation: signing, sending, and message signing.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| `sign` (sign transaction) | Done | Raw hex transaction input, signature output |
-| `signAndSend` (sign + broadcast) | Done | Signs, encodes, and broadcasts; no confirmation waiting/status object |
-| `signMessage` (arbitrary message signing) | Done | CLI `ows sign message`, EIP-712 supported |
-| `signTypedData` (EIP-712 typed structured data) | Partial | EVM only; owner-mode supported, API-token path not yet supported |
-| EVM broadcast (`eth_sendRawTransaction`) | Done | `send_transaction.rs` |
-| Solana broadcast (`sendTransaction`) | Done | `send_transaction.rs` |
-| Sui broadcast (`sui_executeTransactionBlock`) | Done | `ops.rs` |
-| Bitcoin broadcast (mempool.space REST) | Done | `send_transaction.rs` |
-| Cosmos broadcast (`/cosmos/tx/v1beta1/txs`) | Done | `send_transaction.rs` |
-| Tron broadcast (`/wallet/broadcasthex`) | Done | `send_transaction.rs` |
-| TON broadcast (`sendBoc`) | Done | `ops.rs` |
-| Error code: `WALLET_NOT_FOUND` | Done | `ows-core/src/error.rs` |
-| Error code: `CHAIN_NOT_SUPPORTED` | Done | `ows-core/src/error.rs` |
-| Error code: `INVALID_PASSPHRASE` | Done | `ows-core/src/error.rs` |
-| Error code: `POLICY_DENIED` | Done | Returned when an API key request fails policy (`ows-core/src/error.rs`) |
-| Error code: `API_KEY_NOT_FOUND` | Done | `ows-core/src/error.rs` |
-| Error code: `API_KEY_EXPIRED` | Done | `ows-core/src/error.rs` |
-| Concurrency (per-wallet mutex / nonce manager) | Not started | No explicit nonce manager or same-wallet serialization |
-| Caller authentication (owner vs agent) | Done | Implemented in `ows-lib`; used by CLI and bindings |
-
-## Design Decision
-
-**OWS defines a minimal, chain-agnostic interface with three core operations (`sign`, `signAndSend`, `signMessage`) that accept serialized chain-specific data and return chain-specific results. The interface never exposes private keys.**
-
-### Why This Shape
-
-We studied the interfaces of six major wallet systems:
-
-| System | Interface Style | Key Insight |
-|---|---|---|
-| Privy | REST + SDK (chain-specific methods) | Separate `ethereum.sendTransaction` vs `solana.signTransaction` |
-| Coinbase AgentKit | ActionProviders + WalletProviders | Provider pattern cleanly separates "what" from "how" |
-| Solana Wallet Standard | Feature-based registration | `signTransaction`, `signMessage` as opt-in features |
-| W3C Universal Wallet | `lock/unlock/add/remove/export` | Lifecycle operations, not signing |
-| WalletConnect v2 | JSON-RPC over relay | `wallet_invokeMethod` routes to chain-specific RPC |
-| Turnkey | REST API (sign arbitrary payloads) | Curve-primitive signing, chain-agnostic |
-
-OWS takes Turnkey's chain-agnostic signing philosophy and wraps it in Coinbase's provider pattern.
 
 ## Interface Definition
 
@@ -176,17 +133,13 @@ The `typedDataJson` field must be a JSON string containing the standard EIP-712 
 }
 ```
 
-Returns a `SignMessageResult` with the signature and recovery ID. Only supported for EVM chains. Current implementations support owner-mode typed-data signing; API-token typed-data signing is not yet available.
+Returns a `SignMessageResult` with the signature and recovery ID. Only supported for EVM chains.
 
 ## Serialized Transaction Format
 
 Current OWS implementations accept **already-serialized transaction bytes encoded as hex**. OWS signs those bytes, and for broadcast-capable chains it encodes the signed transaction into the wire format expected by the chain RPC.
 
-Structured transaction-building APIs, automatic field population, and confirmation management are not part of the current signing surface.
-
 ## Error Handling
-
-The canonical core error surface currently includes the following codes:
 
 | Code | Meaning |
 |---|---|
@@ -199,17 +152,11 @@ The canonical core error surface currently includes the following codes:
 | `API_KEY_NOT_FOUND` | The provided API token did not resolve to a key |
 | `API_KEY_EXPIRED` | The API key has expired |
 
-Broadcast failures and lower-level crypto/runtime failures may also be surfaced by the CLI or library layer, but they are not currently part of the canonical `ows-core` error-code enum.
-
 ## Concurrency
 
 Current implementations do not provide a per-wallet nonce manager or explicit same-wallet request serialization. Callers that need strict nonce coordination must currently handle it at a higher level.
 
 ## References
 
-- [Coinbase AgentKit: ActionProviders](https://github.com/coinbase/agentkit)
-- [Privy Server Wallet API](https://docs.privy.io/guide/server-wallets/usage/ethereum)
-- [Solana Wallet Standard: Features](https://github.com/anza-xyz/wallet-standard)
-- [Turnkey Signing API](https://docs.turnkey.com)
 - [EIP-191: Signed Data Standard](https://eips.ethereum.org/EIPS/eip-191)
 - [EIP-712: Typed Structured Data](https://eips.ethereum.org/EIPS/eip-712)

@@ -1,39 +1,6 @@
-# 01 - Storage Format
+# Storage Format
 
 > How wallets are encrypted, structured, and stored on the local filesystem.
-
-## Implementation Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Vault directory (`~/.ows/wallets/`) | Done | `ows-lib/src/vault.rs` |
-| Wallet file format (OWS v2 envelope over Keystore v3) | Done | `ows-core/src/wallet_file.rs` |
-| Filesystem permissions (700 dirs, 600 files) | Done | `ows-lib/src/vault.rs` |
-| Permission verification on startup | Partial | Warns but does not refuse to operate |
-| Audit log (`~/.ows/logs/audit.jsonl`) | Done | `ows-cli/src/audit.rs` |
-| Crypto object (AES-256-GCM + scrypt) | Done | `ows-signer/src/crypto.rs` |
-| Keystore v3 import | Not started | No v3 import/re-wrap logic |
-| `~/.ows/keys/` directory + API key files | Done | `ows-lib/src/key_store.rs` |
-| `~/.ows/policies/` directory + policy files | Done | `ows-lib/src/policy_store.rs` |
-| HKDF-SHA256 crypto envelope support | Done | API key token-derived encryption |
-| Passphrase 12-char minimum enforcement | Not started | No validation at creation time |
-
-## Design Decision
-
-**OWS uses an extended Ethereum Keystore v3 format with per-chain type adaptations, stored in a well-known directory with strict filesystem permissions.**
-
-### Why This Approach
-
-We evaluated four storage strategies:
-
-| Approach | Pros | Cons |
-|---|---|---|
-| Raw private keys in env vars | Simple | Catastrophically insecure; keys leak into logs, process lists, LLM contexts |
-| Cloud KMS (Privy, Turnkey) | Strong security, TEE-backed | Requires network; not local-first; vendor lock-in |
-| OS keychain (macOS Keychain, Windows DPAPI) | OS-level encryption | Not portable across platforms; no standard multi-key format |
-| **Encrypted JSON keystore** | Portable, proven, auditable, local-first | Must protect against brute-force; requires passphrase management |
-
-The Ethereum Keystore v3 format has been battle-tested since 2015, is implemented in every major Web3 library, and provides strong encryption with configurable KDF parameters. OWS extends it to support non-EVM chains while maintaining backward compatibility with existing EVM tooling.
 
 ## Vault Directory Structure
 
@@ -125,7 +92,7 @@ Each wallet is stored as a single JSON file extending the Ethereum Keystore v3 s
 
 ## API Key File Format
 
-Each API key is stored as a JSON file in `~/.ows/keys/`. The key file contains metadata, policy attachments, and **encrypted copies of wallet secrets** re-encrypted under the API token (see [03-policy-engine.md](03-policy-engine.md) for the full cryptographic design).
+Each API key is stored as a JSON file in `~/.ows/keys/`. The key file contains metadata, policy attachments, and **encrypted copies of wallet secrets** re-encrypted under the API token (see [Policy Engine](03-policy-engine.md) for the full cryptographic design).
 
 ```json
 {
@@ -155,7 +122,7 @@ Each API key is stored as a JSON file in `~/.ows/keys/`. The key file contains m
 |---|---|---|---|
 | `id` | string | yes | UUID v4 key identifier |
 | `name` | string | yes | Human-readable label for the key |
-| `token_hash` | string | yes | SHA-256 hex digest of the raw token. The raw token (`ows_key_...`) is shown once at creation and never stored. |
+| `token_hash` | string | yes | SHA-256 hex digest of the raw token. The raw token (`ows_key_<64 hex chars>`) is shown once at creation and never stored. |
 | `created_at` | string | yes | ISO 8601 creation timestamp |
 | `wallet_ids` | array | yes | Wallet IDs this key is authorized to access |
 | `policy_ids` | array | yes | Policy IDs evaluated on every request made with this key |
@@ -200,8 +167,6 @@ The `crypto` object follows Keystore v3 conventions with two upgrades:
 | `salt` | string | Hex-encoded random salt (32 bytes) |
 | `info` | string | Context string (`"ows-api-key-v1"`) |
 
-HKDF is used for API tokens because they are 256-bit random values — scrypt's brute-force resistance is unnecessary for high-entropy inputs. HKDF derives the key in microseconds vs scrypt's ~500ms.
-
 For `aes-128-ctr` (backward compat), a `mac` field with `keccak-256(dk[16..31] ++ ciphertext)` is required, following the Keystore v3 spec.
 
 ### What Gets Encrypted
@@ -237,9 +202,9 @@ All signing operations are appended to `~/.ows/logs/audit.jsonl`:
 }
 ```
 
-Supported operations: `create_wallet`, `import_wallet`, `export_wallet`, `broadcast_transaction`, `delete_wallet`, `rename_wallet`, `policy_evaluated`, `policy_denied`, `policy_timeout`.
+Current CLI audit operations include `create_wallet`, `import_wallet`, `export_wallet`, `broadcast_transaction`, `delete_wallet`, and `rename_wallet`.
 
-All fields except `timestamp`, `wallet_id`, and `operation` are optional. Policy-related entries may include `api_key_id` and `policy_id` fields.
+All fields except `timestamp`, `wallet_id`, and `operation` are optional.
 
 The audit log is append-only. Implementations MUST NOT allow deletion or modification of existing entries. Log rotation is permitted (e.g., monthly archives).
 
@@ -259,4 +224,3 @@ Exported OWS wallets with `cipher: "aes-128-ctr"` and `key_type: "private_key"` 
 - [ERC-2335: BLS12-381 Keystore](https://eips.ethereum.org/EIPS/eip-2335)
 - [BIP-39: Mnemonic Seed Phrases](https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki)
 - [NIST SP 800-38D: GCM Mode](https://csrc.nist.gov/publications/detail/sp/800-38d/final)
-- [Privy: Low-Level Key Management](https://privy.io/blog/powering-programmable-wallets-with-low-level-key-management)

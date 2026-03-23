@@ -1,7 +1,7 @@
 # Policy Engine & API Keys — Implementation Guide
 
-> Design document for implementing OWS policy enforcement and API key-based agent access.
-> Supersedes `03-policy-engine.md` and parts of `05-key-isolation.md`.
+> Detailed implementation guide for OWS policy enforcement and API key-based agent access.
+> This document complements the numbered specs; the canonical behavior should also be reflected in `03-policy-engine.md` and `05-key-isolation.md`.
 
 ## Table of Contents
 

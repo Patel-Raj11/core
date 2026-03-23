@@ -99,7 +99,7 @@ const solAddr = deriveAddress(mnemonic, "solana");
 
 #### `createWallet(name, passphrase?, words?, vaultPath?)`
 
-Create a new wallet. Generates a mnemonic and derives addresses for all supported chains.
+Create a new wallet. Generates a mnemonic and derives addresses for the current auto-derived chain set.
 
 ```javascript
 const wallet = createWallet("agent-treasury");
@@ -121,7 +121,7 @@ console.log(wallet.accounts);
 | `name` | `string` | &mdash; | Wallet name |
 | `passphrase` | `string` | `undefined` | Encryption passphrase |
 | `words` | `number` | `12` | Mnemonic word count |
-| `vaultPath` | `string` | `~/.ows/wallets` | Custom vault directory |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
 
 **Returns:** `WalletInfo`
 
@@ -227,7 +227,7 @@ console.log(wallet3.accounts.length); // => 8
 | `name` | `string` | &mdash; | Wallet name |
 | `privateKeyHex` | `string` | &mdash; | Hex-encoded private key (with or without `0x` prefix). Ignored when both curve keys are provided. |
 | `passphrase` | `string` | `undefined` | Encryption passphrase |
-| `vaultPath` | `string` | `~/.ows/wallets` | Custom vault directory |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
 | `chain` | `string` | `"evm"` | Source chain: `"evm"`, `"bitcoin"`, `"cosmos"`, `"tron"`, `"filecoin"` (secp256k1) or `"solana"`, `"sui"`, `"ton"` (Ed25519) |
 | `secp256k1Key` | `string` | `undefined` | Explicit secp256k1 private key (hex). Overrides random generation for secp256k1 chains. |
 | `ed25519Key` | `string` | `undefined` | Explicit Ed25519 private key (hex). Overrides random generation for Ed25519 chains. |
@@ -254,13 +254,15 @@ console.log(result.recoveryId); // 0 or 1
 | `passphrase` | `string` | `undefined` | Decryption passphrase |
 | `encoding` | `string` | `"utf8"` | `"utf8"` or `"hex"` |
 | `index` | `number` | `0` | Account index |
-| `vaultPath` | `string` | `~/.ows/wallets` | Custom vault directory |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
 
 **Returns:** `SignResult`
 
 #### `signTypedData(wallet, chain, typedDataJson, passphrase?, index?, vaultPath?)`
 
 Sign EIP-712 typed structured data (EVM only).
+
+Current implementations support typed-data signing for owner-mode credentials. API-token typed-data signing is not yet supported.
 
 ```javascript
 const typedData = JSON.stringify({
@@ -291,7 +293,7 @@ console.log(result.recoveryId); // 27 or 28
 | `typedDataJson` | `string` | &mdash; | JSON string of EIP-712 typed data |
 | `passphrase` | `string` | `undefined` | Decryption passphrase |
 | `index` | `number` | `0` | Account index |
-| `vaultPath` | `string` | `~/.ows/wallets` | Custom vault directory |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
 
 **Returns:** `SignResult`
 
@@ -308,7 +310,7 @@ console.log(result.signature);
 
 #### `signAndSend(wallet, chain, txHex, passphrase?, index?, rpcUrl?, vaultPath?)`
 
-Sign and broadcast a transaction. Requires an RPC URL.
+Sign and broadcast a transaction. If `rpcUrl` is omitted, OWS resolves it from explicit config overrides or built-in defaults.
 
 ```javascript
 const result = signAndSend(
@@ -320,9 +322,129 @@ console.log(result.txHash);
 
 **Returns:** `SendResult`
 
+### Policy Management
+
+#### `createPolicy(policyJson, vaultPath?)`
+
+Register a policy from a JSON string.
+
+```javascript
+const policy = JSON.stringify({
+  id: "base-only",
+  name: "Base only until April",
+  version: 1,
+  created_at: "2026-03-22T00:00:00Z",
+  rules: [
+    { type: "allowed_chains", chain_ids: ["eip155:8453"] },
+    { type: "expires_at", timestamp: "2026-04-01T00:00:00Z" },
+  ],
+  action: "deny",
+});
+
+createPolicy(policy);
+```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `policyJson` | `string` | &mdash; | JSON string of the policy definition |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
+
+#### `listPolicies(vaultPath?)`
+
+List all registered policies.
+
+```javascript
+const policies = listPolicies();
+console.log(policies); // => [{ id: "base-only", name: "Base only until April", ... }]
+```
+
+**Returns:** `object[]`
+
+#### `getPolicy(id, vaultPath?)`
+
+Get a single policy by ID.
+
+```javascript
+const policy = getPolicy("base-only");
+console.log(policy.name); // => "Base only until April"
+```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | `string` | &mdash; | Policy ID |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
+
+**Returns:** `object`
+
+#### `deletePolicy(id, vaultPath?)`
+
+Delete a policy by ID.
+
+```javascript
+deletePolicy("base-only");
+```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | `string` | &mdash; | Policy ID |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
+
+### API Key Management
+
+#### `createApiKey(name, walletIds, policyIds, passphrase, expiresAt?, vaultPath?)`
+
+Create an API key for agent access to wallets. Returns the raw token (shown once &mdash; caller must save it) and key metadata.
+
+```javascript
+const key = createApiKey(
+  "claude-agent",
+  ["my-wallet"],
+  ["base-only"],
+  "my-passphrase",
+);
+console.log(key.token); // => "ows_key_a1b2c3d4..." (save this)
+console.log(key.id);
+console.log(key.name);
+```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `name` | `string` | &mdash; | Human-readable key name |
+| `walletIds` | `string[]` | &mdash; | Wallet names or IDs this key can access |
+| `policyIds` | `string[]` | &mdash; | Policy IDs to enforce on this key |
+| `passphrase` | `string` | &mdash; | Vault passphrase (needed to re-encrypt wallet secrets for the key) |
+| `expiresAt` | `string` | `undefined` | ISO 8601 expiry timestamp |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
+
+**Returns:** `ApiKeyResult` &mdash; `{ token: string, id: string, name: string }`
+
+#### `listApiKeys(vaultPath?)`
+
+List all API keys. Tokens are never returned.
+
+```javascript
+const keys = listApiKeys();
+keys.forEach((k) => console.log(k.id, k.name));
+```
+
+**Returns:** `object[]`
+
+#### `revokeApiKey(id, vaultPath?)`
+
+Revoke (delete) an API key by ID.
+
+```javascript
+revokeApiKey("key-id");
+```
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `id` | `string` | &mdash; | API key ID |
+| `vaultPath` | `string` | `~/.ows` | Custom vault directory root |
+
 ## Custom Vault Path
 
-Every function accepts an optional `vaultPath` parameter. When omitted, the default vault at `~/.ows/wallets/` is used. This is useful for testing or running isolated environments:
+Every function accepts an optional `vaultPath` parameter. When omitted, the default vault root at `~/.ows/` is used. This is useful for testing or running isolated environments:
 
 ```javascript
 import { mkdtempSync, rmSync } from "node:fs";

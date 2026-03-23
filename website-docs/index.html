@@ -14,28 +14,40 @@
 
   <div class="docs-layout">
     <aside class="docs-sidebar">
-      <a href="./" class="active">Overview</a>
-      <a href="doc.html?slug=quickstart">Quickstart</a>
-      <div class="docs-sidebar-title" style="margin-top: 1.5rem;">Specification</div>
-      <a href="doc.html?slug=01-storage-format">01 &mdash; Storage Format</a>
-      <a href="doc.html?slug=02-signing-interface">02 &mdash; Signing Interface</a>
-      <a href="doc.html?slug=03-policy-engine">03 &mdash; Policy Engine</a>
-      <a href="doc.html?slug=04-agent-access-layer">04 &mdash; Agent Access</a>
-      <a href="doc.html?slug=05-key-isolation">05 &mdash; Key Isolation</a>
-      <a href="doc.html?slug=06-wallet-lifecycle">06 &mdash; Wallet Lifecycle</a>
-      <a href="doc.html?slug=07-supported-chains">07 &mdash; Supported Chains</a>
-      <div class="docs-sidebar-title" style="margin-top: 1.5rem;">SDK Reference</div>
-      <a href="doc.html?slug=sdk-cli">CLI</a>
-      <a href="doc.html?slug=sdk-node">Node.js</a>
-      <a href="doc.html?slug=sdk-python">Python</a>
+      <div class="docs-sidebar-brand">
+        <a href="./">OWS</a>
+        <span class="version">v0.3</span>
+      </div>
+      <div class="docs-sidebar-nav">
+        <a href="./" class="active">Overview</a>
+        <a href="doc.html?slug=quickstart">Quickstart</a>
+        <div class="docs-sidebar-title" style="margin-top: 1rem;">Specification</div>
+        <a href="doc.html?slug=01-storage-format">01 &mdash; Storage Format</a>
+        <a href="doc.html?slug=02-signing-interface">02 &mdash; Signing Interface</a>
+        <a href="doc.html?slug=03-policy-engine">03 &mdash; Policy Engine</a>
+        <a href="doc.html?slug=04-agent-access-layer">04 &mdash; Agent Access</a>
+        <a href="doc.html?slug=05-key-isolation">05 &mdash; Key Isolation</a>
+        <a href="doc.html?slug=06-wallet-lifecycle">06 &mdash; Wallet Lifecycle</a>
+        <a href="doc.html?slug=07-supported-chains">07 &mdash; Supported Chains</a>
+        <div class="docs-sidebar-title" style="margin-top: 1rem;">SDK Reference</div>
+        <a href="doc.html?slug=sdk-cli">CLI</a>
+        <a href="doc.html?slug=sdk-node">Node.js</a>
+        <a href="doc.html?slug=sdk-python">Python</a>
+      </div>
+      <div class="docs-sidebar-footer">
+        <a href="https://github.com/open-wallet-standard/core">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+      </div>
     </aside>
 
     <main class="docs-content">
       <h1>Open Wallet Standard v0.3.0</h1>
-      <p class="subtitle">An open standard for secure local wallet storage and agent access.</p>
+      <p class="subtitle">An open standard for local wallet storage, delegated agent access, and policy-gated signing.</p>
 
       <h2>Abstract</h2>
-      <p>The Open Wallet Standard (OWS) defines how cryptographic wallets are stored on a local filesystem, how agents and CLI tools access them through a unified interface, and how policy-based controls govern what operations are permitted &mdash; all without ever exposing private keys to the calling process.</p>
+      <p>The Open Wallet Standard (OWS) defines how cryptographic wallets are stored on a local filesystem, how agents and CLI tools access them through a unified interface, and how policy-based controls govern what operations are permitted. Current implementations keep key material encrypted at rest, apply policy checks before signing, and use in-process hardening during decryption and signing.</p>
       <p>As AI agents become first-class participants in blockchain ecosystems &mdash; executing trades, paying for services, managing treasuries &mdash; they need a standardized, secure way to access wallets locally. Today, every tool rolls its own approach: environment variables with raw private keys, proprietary cloud APIs, bespoke keystore formats. OWS replaces this fragmentation with a single open standard.</p>
 
       <h2>Core Types</h2>
@@ -139,7 +151,7 @@ interface PolicyResult {
           <tr><td><a href="doc.html?slug=02-signing-interface">02 &mdash; Signing Interface</a></td><td>The core sign, signAndSend, signMessage, and simulate operations</td></tr>
           <tr><td><a href="doc.html?slug=03-policy-engine">03 &mdash; Policy Engine</a></td><td>Policy types, evaluation, and enforcement model</td></tr>
           <tr><td><a href="doc.html?slug=04-agent-access-layer">04 &mdash; Agent Access</a></td><td>MCP server, REST API, and SDK interface for agents</td></tr>
-          <tr><td><a href="doc.html?slug=05-key-isolation">05 &mdash; Key Isolation</a></td><td>Process isolation, enclave architecture, and threat model</td></tr>
+          <tr><td><a href="doc.html?slug=05-key-isolation">05 &mdash; Key Isolation</a></td><td>Current in-process hardening, future enclave options, and threat model</td></tr>
           <tr><td><a href="doc.html?slug=06-wallet-lifecycle">06 &mdash; Wallet Lifecycle</a></td><td>Creation, import, export, backup, recovery, and migration</td></tr>
           <tr><td><a href="doc.html?slug=07-supported-chains">07 &mdash; Supported Chains</a></td><td>Chain families, CAIP identifiers, derivation paths, RPC endpoints, and asset identification</td></tr>
         </tbody>
