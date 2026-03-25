@@ -79,6 +79,11 @@ pub const KNOWN_CHAINS: &[Chain] = &[
         chain_id: "eip155:43114",
     },
     Chain {
+        name: "etherlink",
+        chain_type: ChainType::Evm,
+        chain_id: "eip155:42793",
+    },
+    Chain {
         name: "solana",
         chain_type: ChainType::Solana,
         chain_id: "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp",
@@ -356,6 +361,14 @@ mod tests {
         assert_eq!(chain.name, "plasma");
         assert_eq!(chain.chain_type, ChainType::Evm);
         assert_eq!(chain.chain_id, "eip155:9745");
+    }
+
+    #[test]
+    fn test_parse_chain_etherlink_alias() {
+        let chain = parse_chain("etherlink").unwrap();
+        assert_eq!(chain.name, "etherlink");
+        assert_eq!(chain.chain_type, ChainType::Evm);
+        assert_eq!(chain.chain_id, "eip155:42793");
     }
 
     #[test]
