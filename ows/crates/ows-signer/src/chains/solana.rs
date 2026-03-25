@@ -816,6 +816,28 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_presigned_envelope() {
+        // A pre-signed envelope (first sig slot non-zero) should still be
+        // detected via heuristic 2 (msg header matches sig count).
+        let signer = SolanaSigner;
+
+        // Build envelope with non-zero first sig (simulating pre-signed tx)
+        let mut envelope = vec![0x01]; // 1 sig slot
+        envelope.extend_from_slice(&[0xDD; 64]); // non-zero sig
+        envelope.push(0x01); // num_required_signatures = 1 (matches sig count)
+        envelope.extend_from_slice(b"presigned_test");
+
+        let signable = signer.extract_signable_bytes(&envelope).unwrap();
+        let mut expected = vec![0x01u8];
+        expected.extend_from_slice(b"presigned_test");
+        assert_eq!(
+            signable,
+            expected.as_slice(),
+            "pre-signed envelope should still be detected via msg header heuristic"
+        );
+    }
+
+    #[test]
     fn test_extract_short_raw_message_passthrough() {
         // Very short raw message (shorter than 1 sig slot + header)
         let signer = SolanaSigner;
