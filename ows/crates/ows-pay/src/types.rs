@@ -108,15 +108,35 @@ pub struct X402Response {
     #[serde(default)]
     pub x402_version: Option<u32>,
     pub accepts: Vec<PaymentRequirements>,
+    #[serde(default)]
+    pub resource: Option<serde_json::Value>,
 }
 
+/// The signed payment payload sent to the server in the payment header.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum PaymentPayload {
+    V1(PaymentPayloadV1),
+    V2(PaymentPayloadV2),
+}
+
+/// x402 v1 payment payload.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PaymentPayload {
+pub struct PaymentPayloadV1 {
     pub x402_version: u32,
     pub scheme: String,
     pub network: String,
-    /// Scheme-specific payload. For "exact" (EVM): contains `Eip3009Payload`.
+    pub payload: serde_json::Value,
+}
+
+/// x402 v2 payment payload.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PaymentPayloadV2 {
+    pub x402_version: u32,
+    pub accepted: PaymentRequirements,
+    pub resource: Option<serde_json::Value>,
     pub payload: serde_json::Value,
 }
 
